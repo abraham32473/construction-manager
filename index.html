@@ -703,7 +703,7 @@ function AuthScreen() {
                 setError("Account created! Check your email to confirm, then log in.");
         }
         else if (mode === "reset") {
-            const { error } = await sb.auth.resetPasswordForEmail(email);
+            const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
             if (error)
                 setError(error.message);
             else
