@@ -1476,7 +1476,8 @@ function App() {
         if (!file)
             return;
         const fileName = `${userId()}/${Date.now()}_${file.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, file, { contentType: file.type || undefined }));
+        const fileBuffer = await file.arrayBuffer();
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, fileBuffer, { contentType: file.type || undefined }));
         if (upErr) {
             alert("The receipt upload had trouble connecting. Please try again.");
             return;
@@ -1493,7 +1494,8 @@ function App() {
         let fileUrl = null;
         if (form.utilityFile) {
             const fileName = `${userId()}/${Date.now()}_${form.utilityFile.name}`;
-            const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.utilityFile, { contentType: form.utilityFile.type || undefined }));
+            const utilityFileBuffer = await form.utilityFile.arrayBuffer();
+            const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, utilityFileBuffer, { contentType: form.utilityFile.type || undefined }));
             if (!upErr) {
                 const { data: urlData } = sb.storage.from("landlord-docs").getPublicUrl(fileName);
                 fileUrl = urlData.publicUrl;
@@ -1540,7 +1542,8 @@ function App() {
         if (!file)
             return null;
         const fileName = `${userId()}/${Date.now()}_${file.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, file, { contentType: file.type || undefined }));
+        const fileBuffer = await file.arrayBuffer();
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, fileBuffer, { contentType: file.type || undefined }));
         if (upErr)
             return null;
         const { data: urlData } = sb.storage.from("landlord-docs").getPublicUrl(fileName);
@@ -1765,7 +1768,8 @@ function App() {
         if (!form.propertyId || !form.noticeFile)
             return;
         const fileName = `${userId()}/${Date.now()}_${form.noticeFile.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.noticeFile, { contentType: form.noticeFile.type || undefined }));
+        const noticeFileBuffer = await form.noticeFile.arrayBuffer();
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, noticeFileBuffer, { contentType: form.noticeFile.type || undefined }));
         if (upErr) {
             showErr(upErr);
             return;
@@ -1781,7 +1785,8 @@ function App() {
         if (!form.propertyId || !form.blueprintFile)
             return;
         const fileName = `${userId()}/${Date.now()}_${form.blueprintFile.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.blueprintFile));
+        const blueprintFileBuffer = await form.blueprintFile.arrayBuffer();
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, blueprintFileBuffer, { contentType: form.blueprintFile.type || undefined }));
         if (upErr) {
             showErr(upErr);
             return;
@@ -1813,7 +1818,8 @@ function App() {
         if (!form.propertyId || !form.contractFile)
             return;
         const fileName = `${userId()}/${Date.now()}_${form.contractFile.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.contractFile));
+        const contractFileBuffer = await form.contractFile.arrayBuffer();
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, contractFileBuffer, { contentType: form.contractFile.type || undefined }));
         if (upErr) {
             showErr(upErr);
             return;
@@ -1829,7 +1835,8 @@ function App() {
         if (!form.propertyId || !form.taxFile)
             return;
         const fileName = `${userId()}/${Date.now()}_${form.taxFile.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.taxFile, { contentType: form.taxFile.type || undefined }));
+        const taxFileBuffer = await form.taxFile.arrayBuffer();
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, taxFileBuffer, { contentType: form.taxFile.type || undefined }));
         if (upErr) {
             showErr(upErr);
             return;
@@ -1873,7 +1880,8 @@ function App() {
         if (!form.formFile)
             return;
         const fileName = `${userId()}/${Date.now()}_${form.formFile.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.formFile, { contentType: form.formFile.type || undefined }));
+        const formFileBuffer = await form.formFile.arrayBuffer();
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, formFileBuffer, { contentType: form.formFile.type || undefined }));
         if (upErr) {
             showErr(upErr);
             return;
