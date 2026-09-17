@@ -2829,8 +2829,8 @@ function App() {
                     u.notes && React.createElement("div", { style: { color: C.muted, fontSize: 13, marginTop: 4 } }, u.notes),
                     u.file_url && React.createElement("a", { href: u.file_url, target: "_blank", rel: "noreferrer", style: { fontSize: 12, color: C.blue, marginTop: 8, display: "inline-block" } }, "View Bill"))))
             )),
-            !loadingData && tab === "Subcontractors" && (TRADES.map(trade => {
-                const list = contractorsForTrade(trade);
+            !loadingData && tab === "Subcontractors" && (Array.from(new Set(contractors.map(c => c.trade || "Other"))).sort().map(trade => {
+                const list = contractors.filter(c => (c.trade || "Other") === trade);
                 if (list.length === 0)
                     return null;
                 return (React.createElement("div", { key: trade, style: { marginBottom: 16 } },
