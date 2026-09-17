@@ -1092,7 +1092,7 @@ function App() {
             sb.from("repairs").select("*").order("id"),
             sb.from("rent_history").select("*").order("id"),
             sb.from("damages").select("*").order("id"),
-            sb.from("contractors").select("*").order("id"),
+            sb.from("cm_contractors").select("*").order("id"),
             sb.from("inspections").select("*").order("id"),
             sb.from("notices").select("*").order("id"),
             sb.from("contracts").select("*").order("id"),
@@ -1672,7 +1672,7 @@ function App() {
     const addContractor = async () => {
         if (!form.name || !form.trade)
             return;
-        const { data, error } = await sb.from("contractors").insert({ user_id: userId(), name: form.name, trade: form.trade, phone: form.phone || "", email: form.cemail || "", notes: form.cnotes || "" }).select();
+        const { data, error } = await sb.from("cm_contractors").insert({ user_id: userId(), name: form.name, trade: form.trade, phone: form.phone || "", email: form.cemail || "", notes: form.cnotes || "" }).select();
         showErr(error);
         if (data)
             setContractors(c => [...c, ...data]);
@@ -1685,7 +1685,7 @@ function App() {
     const updateContractor = async () => {
         if (!form.contractorId || !form.name || !form.trade)
             return;
-        const { error } = await sb.from("contractors").update({ name: form.name, trade: form.trade, phone: form.phone || "", email: form.cemail || "", notes: form.cnotes || "" }).eq("id", form.contractorId);
+        const { error } = await sb.from("cm_contractors").update({ name: form.name, trade: form.trade, phone: form.phone || "", email: form.cemail || "", notes: form.cnotes || "" }).eq("id", form.contractorId);
         showErr(error);
         if (!error) {
             setContractors(cs => cs.map(c => c.id === form.contractorId ? { ...c, name: form.name, trade: form.trade, phone: form.phone || "", email: form.cemail || "", notes: form.cnotes || "" } : c));
@@ -2214,7 +2214,7 @@ function App() {
     const deleteContractor = async (c) => {
         if (!window.confirm(`Delete contractor "${c.name}"?`))
             return;
-        const { error } = await sb.from("contractors").delete().eq("id", c.id);
+        const { error } = await sb.from("cm_contractors").delete().eq("id", c.id);
         showErr(error);
         if (!error)
             setContractors(cs => cs.filter(x => x.id !== c.id));
