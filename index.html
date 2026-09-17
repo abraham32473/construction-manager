@@ -1781,7 +1781,7 @@ function App() {
         if (!form.propertyId || !form.blueprintFile)
             return;
         const fileName = `${userId()}/${Date.now()}_${form.blueprintFile.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.blueprintFile, { contentType: form.blueprintFile.type || undefined }));
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.blueprintFile));
         if (upErr) {
             showErr(upErr);
             return;
@@ -1813,7 +1813,7 @@ function App() {
         if (!form.propertyId || !form.contractFile)
             return;
         const fileName = `${userId()}/${Date.now()}_${form.contractFile.name}`;
-        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.contractFile, { contentType: form.contractFile.type || undefined }));
+        const { error: upErr } = await withRetry(() => sb.storage.from("landlord-docs").upload(fileName, form.contractFile));
         if (upErr) {
             showErr(upErr);
             return;
