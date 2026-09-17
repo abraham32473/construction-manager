@@ -1088,15 +1088,15 @@ function App() {
     const loadAllData = async () => {
         setLoadingData(true);
         const [p, r, rh, d, c, ins, nt, ct, pm, pt, fm, res, rl, pr, tn, rq, lc, lcp, ut, imp, gs, jc, mt, co, bp] = await Promise.all([
-            sb.from("properties").select("*").order("id"),
-            sb.from("repairs").select("*").order("id"),
+            sb.from("cm_properties").select("*").order("id"),
+            sb.from("cm_repairs").select("*").order("id"),
             sb.from("rent_history").select("*").order("id"),
             sb.from("damages").select("*").order("id"),
             sb.from("cm_contractors").select("*").order("id"),
-            sb.from("inspections").select("*").order("id"),
+            sb.from("cm_inspections").select("*").order("id"),
             sb.from("notices").select("*").order("id"),
-            sb.from("contracts").select("*").order("id"),
-            sb.from("payments").select("*").order("id"),
+            sb.from("cm_contracts").select("*").order("id"),
+            sb.from("cm_payments").select("*").order("id"),
             sb.from("property_tax").select("*").order("id"),
             sb.from("forms").select("*").order("id"),
             sb.from("resources").select("*").order("id"),
@@ -1225,7 +1225,7 @@ function App() {
     const addProperty = async () => {
         if (!form.address || !form.tenant)
             return;
-        const { data, error } = await sb.from("properties").insert({ user_id: userId(), address: form.address, tenant: form.tenant, rent: Number(form.rent) || 0, lease_end: form.leaseEnd || null, start_date: form.startDate || null, tenant_email: form.tenantEmail || null, tenant_phone: form.tenantPhone || null }).select();
+        const { data, error } = await sb.from("cm_properties").insert({ user_id: userId(), address: form.address, tenant: form.tenant, rent: Number(form.rent) || 0, lease_end: form.leaseEnd || null, start_date: form.startDate || null, tenant_email: form.tenantEmail || null, tenant_phone: form.tenantPhone || null }).select();
         showErr(error);
         if (data)
             setProperties(p => [...p, ...data]);
@@ -1238,7 +1238,7 @@ function App() {
     const updateProperty = async () => {
         if (!form.propId || !form.address || !form.tenant)
             return;
-        const { error } = await sb.from("properties").update({ address: form.address, tenant: form.tenant, rent: Number(form.rent) || 0, lease_end: form.leaseEnd || null, start_date: form.startDate || null, tenant_email: form.tenantEmail || null, tenant_phone: form.tenantPhone || null }).eq("id", form.propId);
+        const { error } = await sb.from("cm_properties").update({ address: form.address, tenant: form.tenant, rent: Number(form.rent) || 0, lease_end: form.leaseEnd || null, start_date: form.startDate || null, tenant_email: form.tenantEmail || null, tenant_phone: form.tenantPhone || null }).eq("id", form.propId);
         showErr(error);
         if (!error) {
             setProperties(ps => ps.map(p => p.id === form.propId ? { ...p, address: form.address, tenant: form.tenant, rent: Number(form.rent) || 0, lease_end: form.leaseEnd || null, start_date: form.startDate || null, tenant_email: form.tenantEmail || null, tenant_phone: form.tenantPhone || null } : p));
@@ -1264,7 +1264,7 @@ function App() {
                     alert("The photo upload had trouble connecting, so this repair will be saved without it. You can add a photo later if needed.");
                 }
             }
-            const { data, error } = await withRetry(() => sb.from("repairs").insert({ user_id: userId(), property_id: Number(form.propertyId), title: form.title, priority: form.priority || "Medium", status: "Open", cost: Number(form.cost) || 0, notes: form.notes || "", trade: form.trade || "General", photo_url: photoUrl, contractor_id: form.repairContractorId ? Number(form.repairContractorId) : null }).select());
+            const { data, error } = await withRetry(() => sb.from("cm_repairs").insert({ user_id: userId(), property_id: Number(form.propertyId), title: form.title, priority: form.priority || "Medium", status: "Open", cost: Number(form.cost) || 0, notes: form.notes || "", trade: form.trade || "General", photo_url: photoUrl, contractor_id: form.repairContractorId ? Number(form.repairContractorId) : null }).select());
             showErr(error);
             if (data)
                 setRepairs(r => [...r, ...data]);
@@ -1293,7 +1293,7 @@ function App() {
                 alert("The photo upload had trouble connecting, so the existing photo (if any) was kept. Try again once you have a better connection.");
             }
         }
-        const { error } = await withRetry(() => sb.from("repairs").update({ property_id: Number(form.propertyId), title: form.title, trade: form.trade || "General", priority: form.priority || "Medium", cost: Number(form.cost) || 0, notes: form.notes || "", contractor_id: form.repairContractorId ? Number(form.repairContractorId) : null, photo_url: photoUrl }).eq("id", form.repairId));
+        const { error } = await withRetry(() => sb.from("cm_repairs").update({ property_id: Number(form.propertyId), title: form.title, trade: form.trade || "General", priority: form.priority || "Medium", cost: Number(form.cost) || 0, notes: form.notes || "", contractor_id: form.repairContractorId ? Number(form.repairContractorId) : null, photo_url: photoUrl }).eq("id", form.repairId));
         showErr(error);
         if (!error) {
             setRepairs(rs => rs.map(r => r.id === form.repairId ? { ...r, property_id: Number(form.propertyId), title: form.title, trade: form.trade || "General", priority: form.priority || "Medium", cost: Number(form.cost) || 0, notes: form.notes || "", contractor_id: form.repairContractorId ? Number(form.repairContractorId) : null, photo_url: photoUrl } : r));
@@ -1308,7 +1308,7 @@ function App() {
         showErr(error);
         if (data) {
             setRentHistory(h => [...h, ...data]);
-            await sb.from("properties").update({ rent: Number(form.newRent) }).eq("id", Number(form.propertyId));
+            await sb.from("cm_properties").update({ rent: Number(form.newRent) }).eq("id", Number(form.propertyId));
             setProperties(ps => ps.map(p => p.id === Number(form.propertyId) ? { ...p, rent: Number(form.newRent) } : p));
         }
         closeModal();
@@ -1702,7 +1702,7 @@ function App() {
             return;
         setSubmitting(true);
         try {
-            const { data, error } = await sb.from("inspections").insert({ user_id: userId(), property_id: Number(form.propertyId), inspection_type: form.inspectionType, inspection_date: form.inspectionDate || new Date().toISOString().slice(0, 10), status: "Scheduled", sections: [] }).select();
+            const { data, error } = await sb.from("cm_inspections").insert({ user_id: userId(), property_id: Number(form.propertyId), inspection_type: form.inspectionType, inspection_date: form.inspectionDate || new Date().toISOString().slice(0, 10), status: "Scheduled", sections: [] }).select();
             showErr(error);
             if (data)
                 setInspections(i => [...i, ...data]);
@@ -1733,7 +1733,7 @@ function App() {
                 }
             }
             const newSections = [...(insp.sections || []), { name: form.sectionName, contractorId: form.sectionContractor || null, photoUrl, notes: form.sectionNotes || "" }];
-            const { error } = await withRetry(() => sb.from("inspections").update({ sections: newSections }).eq("id", inspectionId));
+            const { error } = await withRetry(() => sb.from("cm_inspections").update({ sections: newSections }).eq("id", inspectionId));
             showErr(error);
             if (!error) {
                 setInspections(insps => insps.map(i => i.id === inspectionId ? { ...i, sections: newSections } : i));
@@ -1757,7 +1757,7 @@ function App() {
         if (!insp)
             return;
         const newSections = insp.sections.map((sec, i) => i === form.editingSectionIndex ? { ...sec, name: form.sectionName, contractorId: form.sectionContractor || null, notes: form.sectionNotes || "" } : sec);
-        const { error } = await withRetry(() => sb.from("inspections").update({ sections: newSections }).eq("id", form.editingInspectionId));
+        const { error } = await withRetry(() => sb.from("cm_inspections").update({ sections: newSections }).eq("id", form.editingInspectionId));
         showErr(error);
         if (!error) {
             setInspections(insps => insps.map(i => i.id === form.editingInspectionId ? { ...i, sections: newSections } : i));
@@ -1825,7 +1825,7 @@ function App() {
             return;
         }
         const { data: urlData } = sb.storage.from("landlord-docs").getPublicUrl(fileName);
-        const { data, error } = await withRetry(() => sb.from("contracts").insert({ user_id: userId(), property_id: Number(form.propertyId), title: form.contractTitle || form.contractFile.name, file_url: urlData.publicUrl }).select());
+        const { data, error } = await withRetry(() => sb.from("cm_contracts").insert({ user_id: userId(), property_id: Number(form.propertyId), title: form.contractTitle || form.contractFile.name, file_url: urlData.publicUrl }).select());
         showErr(error);
         if (data)
             setContracts(c => [...c, ...data]);
@@ -1979,7 +1979,7 @@ function App() {
         }
     };
     const updateRepairStatus = async (id, status) => {
-        const { error } = await sb.from("repairs").update({ status }).eq("id", id);
+        const { error } = await sb.from("cm_repairs").update({ status }).eq("id", id);
         showErr(error);
         setRepairs(rs => rs.map(r => r.id === id ? { ...r, status } : r));
         // If this repair originated from a tenant request, reflect its
@@ -2061,7 +2061,7 @@ function App() {
     };
     const pushRequestToRepairs = async (req) => {
         const urgencyToPriority = { urgent: "High", medium: "Medium", low: "Low" };
-        const { data, error } = await withRetry(() => sb.from("repairs").insert({
+        const { data, error } = await withRetry(() => sb.from("cm_repairs").insert({
             user_id: userId(),
             property_id: req.property_id,
             title: req.description,
@@ -2099,7 +2099,7 @@ function App() {
     const deleteProperty = async (p) => {
         if (!window.confirm(`Delete property "${p.address}"?\n\nThis does not automatically delete related repairs, damages, rent history, or inspections for this property — you may want to remove those first.`))
             return;
-        const { error } = await sb.from("properties").delete().eq("id", p.id);
+        const { error } = await sb.from("cm_properties").delete().eq("id", p.id);
         showErr(error);
         if (!error)
             setProperties(ps => ps.filter(x => x.id !== p.id));
@@ -2114,13 +2114,13 @@ function App() {
                 await sb.storage.from("landlord-photos").remove([path]);
             updates.photo_url = null;
         }
-        const { error } = await sb.from("repairs").update(updates).eq("id", r.id);
+        const { error } = await sb.from("cm_repairs").update(updates).eq("id", r.id);
         showErr(error);
         if (!error)
             setRepairs(rs => rs.map(x => x.id === r.id ? { ...x, ...updates } : x));
     };
     const restoreRepair = async (r) => {
-        const { error } = await sb.from("repairs").update({ archived: false }).eq("id", r.id);
+        const { error } = await sb.from("cm_repairs").update({ archived: false }).eq("id", r.id);
         showErr(error);
         if (!error)
             setRepairs(rs => rs.map(x => x.id === r.id ? { ...x, archived: false } : x));
@@ -2137,7 +2137,7 @@ function App() {
             const path = extractStoragePath(r.photo_url, "landlord-photos");
             if (path)
                 await sb.storage.from("landlord-photos").remove([path]);
-            const { error } = await sb.from("repairs").update({ photo_url: null }).eq("id", r.id);
+            const { error } = await sb.from("cm_repairs").update({ photo_url: null }).eq("id", r.id);
             showErr(error);
         }
         setRepairs(rs => rs.map(x => toClean.some(t => t.id === x.id) ? { ...x, photo_url: null } : x));
@@ -2157,7 +2157,7 @@ function App() {
             return;
         }
         const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
-        const { error } = await sb.from("repairs").update({ receipt_url: urlData.publicUrl }).eq("id", repair.id);
+        const { error } = await sb.from("cm_repairs").update({ receipt_url: urlData.publicUrl }).eq("id", repair.id);
         showErr(error);
         if (!error)
             setRepairs(rs => rs.map(r => r.id === repair.id ? { ...r, receipt_url: urlData.publicUrl } : r));
@@ -2199,7 +2199,7 @@ function App() {
     };
     const pushDamageToRepairs = async (d) => {
         const severityToPriority = { Minor: "Low", Moderate: "Medium", Severe: "High" };
-        const { data, error } = await withRetry(() => sb.from("repairs").insert({
+        const { data, error } = await withRetry(() => sb.from("cm_repairs").insert({
             user_id: userId(),
             property_id: d.property_id,
             title: d.description,
@@ -2244,7 +2244,7 @@ function App() {
         const path = extractStoragePath(ct.file_url, "landlord-docs");
         if (path)
             await sb.storage.from("landlord-docs").remove([path]);
-        const { error } = await sb.from("contracts").delete().eq("id", ct.id);
+        const { error } = await sb.from("cm_contracts").delete().eq("id", ct.id);
         showErr(error);
         if (!error)
             setContracts(cs => cs.filter(x => x.id !== ct.id));
@@ -2255,7 +2255,7 @@ function App() {
         const paths = (insp.sections || []).map(s => extractStoragePath(s.photoUrl, "landlord-photos")).filter(Boolean);
         if (paths.length)
             await sb.storage.from("landlord-photos").remove(paths);
-        const { error } = await sb.from("inspections").delete().eq("id", insp.id);
+        const { error } = await sb.from("cm_inspections").delete().eq("id", insp.id);
         showErr(error);
         if (!error) {
             setInspections(is => is.filter(x => x.id !== insp.id));
@@ -2264,7 +2264,7 @@ function App() {
         }
     };
     const updateInspectionStatus = async (id, status) => {
-        const { error } = await sb.from("inspections").update({ status }).eq("id", id);
+        const { error } = await sb.from("cm_inspections").update({ status }).eq("id", id);
         showErr(error);
         if (!error)
             setInspections(is => is.map(i => i.id === id ? { ...i, status } : i));
@@ -2279,7 +2279,7 @@ function App() {
                 await sb.storage.from("landlord-photos").remove([path]);
         }
         const newSections = insp.sections.filter((_, i) => i !== index);
-        const { error } = await sb.from("inspections").update({ sections: newSections }).eq("id", insp.id);
+        const { error } = await sb.from("cm_inspections").update({ sections: newSections }).eq("id", insp.id);
         showErr(error);
         if (!error)
             setInspections(is => is.map(i => i.id === insp.id ? { ...i, sections: newSections } : i));
@@ -2437,7 +2437,7 @@ function App() {
     const addPayment = async () => {
         if (!form.propertyId || !form.paymentType || !form.paymentAmount)
             return;
-        const { data, error } = await withRetry(() => sb.from("payments").insert({
+        const { data, error } = await withRetry(() => sb.from("cm_payments").insert({
             user_id: userId(),
             property_id: Number(form.propertyId),
             type: form.paymentType,
@@ -2453,7 +2453,7 @@ function App() {
     const deletePayment = async (pmt) => {
         if (!window.confirm("Delete this payment record?"))
             return;
-        const { error } = await sb.from("payments").delete().eq("id", pmt.id);
+        const { error } = await sb.from("cm_payments").delete().eq("id", pmt.id);
         showErr(error);
         if (!error)
             setPayments(ps => ps.filter(x => x.id !== pmt.id));
