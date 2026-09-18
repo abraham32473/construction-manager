@@ -2609,7 +2609,8 @@ function App() {
             !loadingData && tab === "Dashboard" && (React.createElement(React.Fragment, null,
                 React.createElement("div", { style: { background: "linear-gradient(135deg, " + C.navy + " 0%, #2d4270 60%, " + C.accent + " 130%)", borderRadius: 16, padding: "24px 22px", marginBottom: 18, color: "#fff", boxShadow: "0 4px 14px rgba(26,39,68,0.25)" } },
                     React.createElement("div", { style: { fontSize: 13, opacity: 0.85, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase" } }, "Welcome back"),
-                    React.createElement("div", { style: { fontSize: 24, fontWeight: 800, fontFamily: "'Baloo 2', sans-serif", marginTop: 2 } }, (profile && profile.full_name) ? profile.full_name : "Contractor"),
+                    React.createElement("div", { style: { fontSize: 24, fontWeight: 800, fontFamily: "'Baloo 2', sans-serif", marginTop: 2 } }, (profile && profile.company_name) ? profile.company_name : (profile && profile.full_name) ? profile.full_name : "Contractor"),
+                    profile && profile.company_name && profile.full_name && React.createElement("div", { style: { fontSize: 13, opacity: 0.85, marginTop: 2 } }, profile.full_name),
                     React.createElement("div", { style: { fontSize: 13, opacity: 0.9, marginTop: 6 } }, properties.length + (properties.length === 1 ? " project" : " projects") + " under management")
                 ),
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 16 } },
