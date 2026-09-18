@@ -1989,6 +1989,8 @@ function App() {
     };
     const saveProfile = async () => {
         const name = form.profileName !== undefined ? form.profileName : (profile ? profile.full_name : "");
+        const companyName = form.profileCompanyName !== undefined ? form.profileCompanyName : (profile ? profile.company_name : "");
+        const licenseNumber = form.profileLicenseNumber !== undefined ? form.profileLicenseNumber : (profile ? profile.license_number : "");
         let signatureUrl = profile ? profile.signature_url : null;
         if (form.profileSignatureFile) {
             const fileName = `${userId()}/signature/${Date.now()}_${form.profileSignatureFile.name}`;
@@ -2001,7 +2003,7 @@ function App() {
                 alert("Couldn't upload the signature image right now. Your name was still saved — try the signature again once you have a better connection.");
             }
         }
-        const { data, error } = await withRetry(() => sb.from("profiles").upsert({ user_id: userId(), full_name: name || null, signature_url: signatureUrl }).select());
+        const { data, error } = await withRetry(() => sb.from("profiles").upsert({ user_id: userId(), full_name: name || null, company_name: companyName || null, license_number: licenseNumber || null, signature_url: signatureUrl }).select());
         showErr(error);
         if (data && data[0]) {
             setProfile(data[0]);
@@ -3050,8 +3052,10 @@ function App() {
             React.createElement("a", { href: l.url, target: "_blank", rel: "noopener noreferrer", style: { ...btnS, padding: "5px 10px", fontSize: 12, textDecoration: "none", display: "inline-block" } }, "Open"),
             React.createElement("button", { style: btnDangerSm, onClick: () => deleteResourceLink(l) }, "Delete")))))))),
             !loadingData && tab === "My Profile" && (React.createElement("div", { style: { maxWidth: 420 } },
-    React.createElement("p", { style: { color: C.muted, fontSize: 13, marginBottom: 16 } }, "This name and signature appear on every rent receipt you send to your tenants."),
-    React.createElement("input", { style: inp, placeholder: "Full Name (appears on receipts)", value: form.profileName !== undefined ? form.profileName : (profile ? profile.full_name || "" : ""), onChange: e => setF("profileName", e.target.value) }),
+    React.createElement("p", { style: { color: C.muted, fontSize: 13, marginBottom: 16 } }, "This information appears on your change orders, invoices, and other documents sent to clients."),
+    React.createElement("input", { style: inp, placeholder: "Company Name", value: form.profileCompanyName !== undefined ? form.profileCompanyName : (profile ? profile.company_name || "" : ""), onChange: e => setF("profileCompanyName", e.target.value) }),
+    React.createElement("input", { style: inp, placeholder: "Full Name", value: form.profileName !== undefined ? form.profileName : (profile ? profile.full_name || "" : ""), onChange: e => setF("profileName", e.target.value) }),
+    React.createElement("input", { style: inp, placeholder: "License Number", value: form.profileLicenseNumber !== undefined ? form.profileLicenseNumber : (profile ? profile.license_number || "" : ""), onChange: e => setF("profileLicenseNumber", e.target.value) }),
     profile && profile.signature_url && !form.profileSignatureFile && (React.createElement("div", { style: { marginBottom: 14 } },
         React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 6 } }, "Current signature:"),
         React.createElement("img", { src: profile.signature_url, style: { maxWidth: 180, display: "block", border: "1px solid " + C.border, borderRadius: 6, padding: 8, background: "#fff" } }))),
