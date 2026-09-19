@@ -1918,7 +1918,7 @@ function App() {
         if (!error)
             setDailyLogs(ds => ds.filter(x => x.id !== log.id));
     };
-    const PORTAL_BASE_URL = "https://property-manager-phi-livid.vercel.app/client-portal.html";
+    const PORTAL_BASE_URL = "https://construction-manager-phi-livid.vercel.app/client-portal.html";
     const clientPortalLink = (c) => `${PORTAL_BASE_URL}?code=${c.invite_code}`;
     const addClient = async () => {
         const propertyIds = form.clientPropertyIds || [];
