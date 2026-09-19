@@ -1,1 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>Client Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=optional" rel="stylesheet">
+<link rel="icon" type="image/png" sizes="512x512" href="/cm-icon-512.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/cm-icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/cm-icon-192.png">
+<meta name="theme-color" content="#1a2744">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f7f8fc; color: #1a2744; }
+  img { max-width: 100%; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+"use strict";
+const { useState, useEffect } = React;
+const C = { navy: "#1a2744", accent: "#5dade2", red: "#dc3545", green: "#2e7d32", blue: "#1565c0", orange: "#d84315", bg: "#f7f8fc", white: "#fff", border: "#e2e6ef", text: "#1a2744", muted: "#6b7a99" };
+const SUPABASE_URL = "https://gistxdxxaehbekgivcks.supabase.co";
+const SUPABASE_KEY = "sb_publishable_S4PvtoVtTRQSxrMhpb5U5Q_4oUpqIcK";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "landlord_app" } });
 
+const badgeColor = (status) => {
+    const s = (status || "").toLowerCase();
+    if (s.includes("complet") || s.includes("approved") || s.includes("pass"))
+        return C.green;
+    if (s.includes("progress") || s.includes("pending") || s.includes("review"))
+        return C.orange;
+    if (s.includes("fail") || s.includes("reject") || s.includes("denied"))
+        return C.red;
+    return C.blue;
+};
+const Badge = ({ text }) => text ? React.createElement("span", { style: { background: badgeColor(text), color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 100, textTransform: "capitalize" } }, text) : null;
+
+const SectionsView = ({ sections }) => {
+    if (!sections)
+        return null;
+    if (Array.isArray(sections)) {
+        return React.createElement("div", { style: { marginTop: 8 } },
+            sections.map((s, i) => React.createElement("div", { key: i, style: { padding: "6px 0", borderBottom: i < sections.length - 1 ? "1px solid " + C.border : "none", fontSize: 13, display: "flex", justifyContent: "space-between", gap: 10 } },
+                React.createElement("span", null, s.label || s.name || s.item || JSON.stringify(s)),
+                (s.status || s.result || s.value) && React.createElement("span", { style: { color: C.muted, fontWeight: 600 } }, s.status || s.result || s.value))));
+    }
+    return React.createElement("pre", { style: { fontSize: 12, background: C.bg, padding: 10, borderRadius: 6, overflowX: "auto", marginTop: 8 } }, JSON.stringify(sections, null, 2));
+};
+
+function App() {
+    const [code, setCode] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        const urlCode = params.get("code");
+        if (urlCode) {
+            try { localStorage.setItem("cm_client_code", urlCode); } catch (e) {}
+            return urlCode;
+        }
+        try { return localStorage.getItem("cm_client_code") || ""; } catch (e) { return ""; }
+    });
+    const [codeInput, setCodeInput] = useState("");
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [viewImage, setViewImage] = useState(null);
+    const [expandedProperty, setExpandedProperty] = useState(0);
+
+    const fetchData = async (c) => {
+        setLoading(true);
+        setError(null);
+        const { data: result, error: rpcError } = await sb.rpc("get_client_portal_data", { p_code: c });
+        setLoading(false);
+        if (rpcError) {
+            setError("Something went wrong loading your portal. Please try again or contact your contractor.");
+            return;
+        }
+        if (result && result.error === "invalid_code") {
+            setError("That link isn't valid. Please contact your contractor for a new one.");
+            return;
+        }
+        setData(result);
+        try { localStorage.setItem("cm_client_code", c); } catch (e) {}
+    };
+
+    useEffect(() => {
+        if (code)
+            fetchData(code);
+    }, []);
+
+    const submitCode = () => {
+        if (!codeInput.trim())
+            return;
+        setCode(codeInput.trim());
+        fetchData(codeInput.trim());
+    };
+
+    const inputStyle = { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid " + C.border, fontSize: 15, marginBottom: 10 };
+    const btnStyle = { background: C.navy, color: "#fff", border: "none", padding: "12px 20px", borderRadius: 8, fontWeight: 700, fontSize: 15, cursor: "pointer" };
+    const cardStyle = { background: "#fff", borderRadius: 12, border: "1px solid " + C.border, padding: 16, marginBottom: 12 };
+
+    if (!code || (error && !data)) {
+        return React.createElement("div", { style: { maxWidth: 420, margin: "60px auto", padding: 24, textAlign: "center" } },
+            React.createElement("div", { style: { fontSize: 26, fontWeight: 800, color: C.navy, fontFamily: "'Baloo 2', sans-serif", marginBottom: 4 } }, "Client Portal"),
+            React.createElement("div", { style: { color: C.muted, fontSize: 14, marginBottom: 24 } }, "Enter the access code your contractor sent you."),
+            error && React.createElement("div", { style: { color: C.red, fontSize: 13, marginBottom: 12 } }, error),
+            React.createElement("input", { style: inputStyle, placeholder: "Access code", value: codeInput, onChange: e => setCodeInput(e.target.value), onKeyDown: e => { if (e.key === "Enter") submitCode(); } }),
+            React.createElement("button", { style: btnStyle, onClick: submitCode }, "View My Project"));
+    }
+
+    if (loading || !data) {
+        return React.createElement("div", { style: { textAlign: "center", marginTop: 100, color: C.muted } }, "Loading\u2026");
+    }
+
+    const properties = data.properties || [];
+
+    const renderDailyLog = (dl) => {
+        const metaBits = [];
+        if (dl.weather)
+            metaBits.push("Weather: " + dl.weather);
+        if (dl.crew_count != null)
+            metaBits.push(dl.crew_count + " crew");
+        const children = [];
+        children.push(React.createElement("div", { key: "date", style: { fontWeight: 700 } }, new Date(dl.log_date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })));
+        if (metaBits.length > 0)
+            children.push(React.createElement("div", { key: "meta", style: { color: C.muted, fontSize: 13, marginTop: 2 } }, metaBits.join(" \u2022 ")));
+        if (dl.work_performed)
+            children.push(React.createElement("div", { key: "work", style: { fontSize: 14, marginTop: 8, whiteSpace: "pre-wrap" } }, dl.work_performed));
+        if (dl.notes)
+            children.push(React.createElement("div", { key: "notes", style: { fontSize: 13, marginTop: 6, color: C.muted, whiteSpace: "pre-wrap" } }, dl.notes));
+        if (dl.photo_urls && dl.photo_urls.length > 0) {
+            const photoEls = dl.photo_urls.map((url, i) => React.createElement("img", { key: i, src: url, style: { width: 80, height: 80, objectFit: "cover", borderRadius: 6, cursor: "pointer", border: "1px solid " + C.border }, onClick: () => setViewImage(url) }));
+            children.push(React.createElement("div", { key: "photos", style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 } }, photoEls));
+        }
+        return React.createElement("div", { key: dl.id, style: cardStyle }, children);
+    };
+
+    const renderInspection = (insp) => {
+        const children = [];
+        children.push(React.createElement("div", { key: "hdr", style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 } },
+            React.createElement("div", { style: { fontWeight: 700 } }, insp.inspection_type || "Inspection"),
+            React.createElement(Badge, { text: insp.status })));
+        if (insp.inspection_date)
+            children.push(React.createElement("div", { key: "date", style: { color: C.muted, fontSize: 13, marginTop: 2 } }, new Date(insp.inspection_date + "T00:00:00").toLocaleDateString()));
+        children.push(React.createElement(SectionsView, { key: "sections", sections: insp.sections }));
+        return React.createElement("div", { key: insp.id, style: cardStyle }, children);
+    };
+
+    const renderChangeOrder = (co) => {
+        const children = [];
+        children.push(React.createElement("div", { key: "hdr", style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 } },
+            React.createElement("div", { style: { fontWeight: 700 } }, co.co_number ? ("CO #" + co.co_number) : "Change Order"),
+            React.createElement(Badge, { text: co.status })));
+        if (co.co_date)
+            children.push(React.createElement("div", { key: "date", style: { color: C.muted, fontSize: 13, marginTop: 2 } }, new Date(co.co_date + "T00:00:00").toLocaleDateString()));
+        if (co.description)
+            children.push(React.createElement("div", { key: "desc", style: { fontSize: 14, marginTop: 8, whiteSpace: "pre-wrap" } }, co.description));
+        return React.createElement("div", { key: co.id, style: cardStyle }, children);
+    };
+
+    const renderProperty = (p, pi) => {
+        const headerRow = React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", padding: "10px 0" }, onClick: () => setExpandedProperty(expandedProperty === pi ? -1 : pi) },
+            React.createElement("div", { style: { fontSize: 18, fontWeight: 800, color: C.navy } }, p.address),
+            React.createElement("div", { style: { color: C.accent, fontSize: 20 } }, expandedProperty === pi ? "\u2212" : "+"));
+        if (expandedProperty !== pi) {
+            return React.createElement("div", { key: p.id, style: { marginBottom: 8 } }, headerRow);
+        }
+        const dailyLogs = p.daily_logs || [];
+        const inspections = p.inspections || [];
+        const changeOrders = p.change_orders || [];
+        const body = React.createElement("div", null,
+            React.createElement("h3", { style: { fontSize: 14, color: C.navy, marginBottom: 8, marginTop: 12 } }, "Daily Logs"),
+            dailyLogs.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 8 } }, "No daily logs yet.") : dailyLogs.map(renderDailyLog),
+            React.createElement("h3", { style: { fontSize: 14, color: C.navy, marginBottom: 8, marginTop: 20 } }, "Inspections"),
+            inspections.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 8 } }, "No inspections yet.") : inspections.map(renderInspection),
+            React.createElement("h3", { style: { fontSize: 14, color: C.navy, marginBottom: 8, marginTop: 20 } }, "Change Orders"),
+            changeOrders.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No change orders yet.") : changeOrders.map(renderChangeOrder));
+        return React.createElement("div", { key: p.id, style: { marginBottom: 20 } }, headerRow, body);
+    };
+
+    const headerCard = React.createElement("div", { style: { background: "linear-gradient(135deg, " + C.navy + " 0%, #2d4270 60%, " + C.accent + " 130%)", color: "#fff", padding: "28px 20px" } },
+        React.createElement("div", { style: { fontSize: 12, opacity: 0.85, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase" } }, "Client Portal"),
+        React.createElement("div", { style: { fontSize: 24, fontWeight: 800, fontFamily: "'Baloo 2', sans-serif", marginTop: 2 } }, data.company_name || data.client_name),
+        data.company_name && React.createElement("div", { style: { fontSize: 13, opacity: 0.85, marginTop: 2 } }, data.client_name),
+        React.createElement("div", { style: { fontSize: 13, opacity: 0.9, marginTop: 8 } }, properties.length + (properties.length === 1 ? " project" : " projects")));
+
+    const bodyContent = properties.length === 0
+        ? React.createElement("div", { style: { color: C.muted, textAlign: "center", marginTop: 40 } }, "No projects are linked to this account yet.")
+        : properties.map(renderProperty);
+
+    const imageModal = viewImage && React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 20 }, onClick: () => setViewImage(null) },
+        React.createElement("img", { src: viewImage, style: { maxWidth: "100%", maxHeight: "100%", borderRadius: 8 } }));
+
+    return React.createElement("div", { style: { maxWidth: 720, margin: "0 auto", paddingBottom: 60 } },
+        headerCard,
+        React.createElement("div", { style: { padding: "16px" } }, bodyContent),
+        imageModal);
+}
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
