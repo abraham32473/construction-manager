@@ -1919,6 +1919,48 @@ function App() {
             setDailyLogs(ds => ds.filter(x => x.id !== log.id));
     };
     const PORTAL_BASE_URL = "https://construction-manager-phi-livid.vercel.app/client-portal.html";
+    const openEditClient = (c) => {
+        const linkedIds = clientProperties.filter(cp => cp.client_id === c.id).map(cp => String(cp.property_id));
+        setForm({ editingClientId: c.id, clientFullName: c.full_name, clientCompanyName: c.company_name || "", clientEmail: c.email || "", clientPhone: c.phone || "", clientPropertyIds: linkedIds });
+        setModal("editClient");
+    };
+    const updateClient = async () => {
+        const id = form.editingClientId;
+        if (!form.clientFullName) {
+            alert("Please enter a name.");
+            return;
+        }
+        const { data, error } = await withRetry(() => sb.from("cm_clients").update({
+            full_name: form.clientFullName,
+            company_name: form.clientCompanyName || null,
+            email: form.clientEmail || null,
+            phone: form.clientPhone || null,
+        }).eq("id", id).select());
+        showErr(error);
+        if (error)
+            return;
+        if (data)
+            setClients(cs => cs.map(x => x.id === id ? data[0] : x));
+
+        const selectedIds = (form.clientPropertyIds || []).map(Number);
+        const currentLinks = clientProperties.filter(cp => cp.client_id === id);
+        const currentIds = currentLinks.map(cp => cp.property_id);
+        const toAdd = selectedIds.filter(pid => !currentIds.includes(pid));
+        const toRemoveLinks = currentLinks.filter(cp => !selectedIds.includes(cp.property_id));
+
+        if (toRemoveLinks.length > 0) {
+            await sb.from("cm_client_properties").delete().in("id", toRemoveLinks.map(l => l.id));
+        }
+        let newLinks = [];
+        if (toAdd.length > 0) {
+            const { data: addedData, error: addError } = await withRetry(() => sb.from("cm_client_properties").insert(toAdd.map(pid => ({ client_id: id, property_id: pid }))).select());
+            showErr(addError);
+            if (addedData)
+                newLinks = addedData;
+        }
+        setClientProperties(cps => [...cps.filter(cp => !toRemoveLinks.some(r => r.id === cp.id)), ...newLinks]);
+        closeModal();
+    };
     const clientPortalLink = (c) => `${PORTAL_BASE_URL}?code=${c.invite_code}`;
     const addClient = async () => {
         const propertyIds = form.clientPropertyIds || [];
@@ -2703,6 +2745,7 @@ function App() {
                         React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 } },
                             React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => emailClientPortalLink(c) }, "Email Portal Link"),
                             React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => setLastInviteCode(c) }, "Show Link"),
+                            React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => openEditClient(c) }, "Edit"),
                             React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12, color: C.red }, onClick: () => deleteClient(c) }, "Delete")));
                 };
                 return React.createElement("div", null,
@@ -2738,12 +2781,12 @@ function App() {
                 React.createElement("div", { onClick: () => setViewProperty(p.id), style: { cursor: "pointer", flex: 1 } },
                     React.createElement("div", { style: { fontWeight: 700 } }, p.address),
                     React.createElement("div", { style: { color: C.muted } },
-                        "Tenant: ",
+                        "Client: ",
                         p.tenant,
                         " \u2014 $",
-                        p.rent,
-                        "/mo ",
-                        p.lease_end ? `— Lease ends ${p.lease_end}` : "")),
+                        Number(p.rent || 0).toLocaleString(),
+                        " Job Budget ",
+                        p.lease_end ? `— Target Completion: ${p.lease_end}` : "")),
                 React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
                     React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => openEditProperty(p) }, "Edit"),
                     React.createElement("button", { style: btnDangerSm, onClick: () => deleteProperty(p) }, "Delete")))))),
@@ -3490,12 +3533,12 @@ function App() {
                 React.createElement("div", { style: { textAlign: "center", borderBottom: "2px solid " + C.navy, paddingBottom: 16, marginBottom: 20 } },
                     React.createElement("h1", { style: { fontSize: 20, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 } }, p.address),
                     React.createElement("div", { style: { fontSize: 14, color: C.muted } },
-                        "Tenant: ",
+                        "Client: ",
                         p.tenant,
                         " \u2014 $",
-                        p.rent,
-                        "/mo ",
-                        p.lease_end ? `— Lease ends ${p.lease_end}` : "")),
+                        Number(p.rent || 0).toLocaleString(),
+                        " Job Budget ",
+                        p.lease_end ? `— Target Completion: ${p.lease_end}` : "")),
                 React.createElement("h3", { style: { marginBottom: 8 } },
                     "Repairs (",
                     pRepairs.length,
@@ -4146,6 +4189,27 @@ function App() {
         })),
     React.createElement("div", { style: { display: "flex", gap: 10 } },
         React.createElement("button", { style: btnP, onClick: addClient }, "Add Client"),
+        React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
+        modal === "editClient" && (React.createElement(Modal, { title: "Edit Client", onClose: closeModal },
+    React.createElement("input", { style: inp, placeholder: "Full Name", value: form.clientFullName || "", onChange: e => setF("clientFullName", e.target.value) }),
+    React.createElement("input", { style: inp, placeholder: "Company Name (optional)", value: form.clientCompanyName || "", onChange: e => setF("clientCompanyName", e.target.value) }),
+    React.createElement("input", { style: inp, type: "email", placeholder: "Email (optional)", value: form.clientEmail || "", onChange: e => setF("clientEmail", e.target.value) }),
+    React.createElement("input", { style: inp, placeholder: "Phone (optional)", value: form.clientPhone || "", onChange: e => setF("clientPhone", e.target.value) }),
+    React.createElement("label", { style: { fontSize: 13, color: C.muted, display: "block", marginBottom: 6, marginTop: 4 } }, "Job Site(s) — select all that apply"),
+    properties.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 10 } }, "Add a job site first.") :
+    React.createElement("div", { style: { marginBottom: 12, maxHeight: 200, overflowY: "auto", border: "1px solid " + C.border, borderRadius: 8, padding: 8 } },
+        properties.map(p => {
+            const selected = form.clientPropertyIds || [];
+            const isChecked = selected.includes(String(p.id));
+            return React.createElement("label", { key: p.id, style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", fontSize: 14, cursor: "pointer" } },
+                React.createElement("input", { type: "checkbox", checked: isChecked, onChange: e => {
+                    const next = e.target.checked ? [...selected, String(p.id)] : selected.filter(id => id !== String(p.id));
+                    setF("clientPropertyIds", next);
+                } }),
+                p.address);
+        })),
+    React.createElement("div", { style: { display: "flex", gap: 10 } },
+        React.createElement("button", { style: btnP, onClick: updateClient }, "Save Changes"),
         React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
         modal === "editTenant" && (React.createElement(Modal, { title: "Edit Tenant", onClose: closeModal },
     React.createElement("input", { style: inp, placeholder: "Tenant Full Name", value: form.tenantFullName || "", onChange: e => setF("tenantFullName", e.target.value) }),
