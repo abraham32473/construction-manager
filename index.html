@@ -746,11 +746,10 @@ function HelpTab() {
             "Add a property with its address and details first — repairs, tenants, inspections, and documents all attach to a property record.",
             "Tap + Add Property from this tab to get started."
         ]},
-        { key: "tenants", tag: "Tenant Portal", color: C.blue, title: "Tenant Requests & Inviting Tenants", body: [
-            "Tap + Invite Tenant, enter their name and email — you'll get a one-time invite code.",
-            "Send the code (tap Email Invite, or share it yourself). Your tenant opens the tenant portal, taps Activate Invite, enters the code, and sets a password.",
-            "Once active, tenants can submit repair requests with photos any time. Requests land here for you to review.",
-            "Tap Push to Repairs to turn a tenant's request into a tracked repair job with cost and priority."
+        { key: "tenants", tag: "Client Portal", color: C.blue, title: "Client Requests & Client Portal", body: [
+            "Tap + Add Client, enter their name and select the job site(s) they should see — one client can be linked to multiple projects at once.",
+            "Share their portal link (tap Email Portal Link, or copy it yourself) — no password needed, it just opens straight to their project(s).",
+            "Clients see Daily Logs, Inspections, and Change Orders for their linked job sites only. Costs and other internal details stay private."
         ]},
         { key: "repairs", tag: "Maintenance", color: C.blue, title: "Punch List", body: [
             "Log any repair job — trade, priority, cost, and notes — whether it came from a tenant request or you started it yourself.",
@@ -869,6 +868,8 @@ function App() {
     const [blueprints, setBlueprints] = useState([]);
     const [cmForms, setCmForms] = useState([]);
     const [dailyLogs, setDailyLogs] = useState([]);
+    const [clients, setClients] = useState([]);
+    const [clientProperties, setClientProperties] = useState([]);
     const [payments, setPayments] = useState([]);
     const [propertyTax, setPropertyTax] = useState([]);
     const [forms, setForms] = useState([]);
@@ -1093,7 +1094,7 @@ function App() {
     const loadAllData = async () => {
         setLoadingData(true);
         const minDelay = new Promise(resolve => setTimeout(resolve, 500));
-        const [p, r, rh, d, c, ins, nt, ct, pm, pt, fm, res, rl, pr, tn, rq, lc, lcp, ut, imp, gs, jc, mt, co, bp, cf, dl] = await Promise.all([
+        const [p, r, rh, d, c, ins, nt, ct, pm, pt, fm, res, rl, pr, tn, rq, lc, lcp, ut, imp, gs, jc, mt, co, bp, cf, dl, cl, ccp] = await Promise.all([
             sb.from("cm_properties").select("*").order("id"),
             sb.from("cm_repairs").select("*").order("id"),
             sb.from("rent_history").select("*").order("id"),
@@ -1121,6 +1122,8 @@ function App() {
             sb.from("blueprints").select("*").order("created_at", { ascending: false }),
             sb.from("cm_forms").select("*").order("created_at", { ascending: false }),
             sb.from("cm_daily_logs").select("*").order("log_date", { ascending: false }),
+            sb.from("cm_clients").select("*").order("full_name"),
+            sb.from("cm_client_properties").select("*"),
         ]);
         if (p.data)
             setProperties(p.data);
@@ -1176,6 +1179,10 @@ function App() {
             setCmForms(cf.data);
         if (dl.data)
             setDailyLogs(dl.data);
+        if (cl.data)
+            setClients(cl.data);
+        if (ccp.data)
+            setClientProperties(ccp.data);
         if (lc.data && lcp.data)
             await ensureLawnCarePayments(lc.data, lcp.data);
         await minDelay;
@@ -1911,6 +1918,50 @@ function App() {
         if (!error)
             setDailyLogs(ds => ds.filter(x => x.id !== log.id));
     };
+    const PORTAL_BASE_URL = "https://property-manager-phi-livid.vercel.app/client-portal.html";
+    const clientPortalLink = (c) => `${PORTAL_BASE_URL}?code=${c.invite_code}`;
+    const addClient = async () => {
+        const propertyIds = form.clientPropertyIds || [];
+        if (!form.clientFullName || propertyIds.length === 0) {
+            alert("Please enter a name and select at least one job site.");
+            return;
+        }
+        const { data, error } = await withRetry(() => sb.from("cm_clients").insert({
+            user_id: userId(),
+            full_name: form.clientFullName,
+            company_name: form.clientCompanyName || null,
+            email: form.clientEmail || null,
+            phone: form.clientPhone || null,
+        }).select());
+        showErr(error);
+        if (error || !data)
+            return;
+        const newClient = data[0];
+        const links = propertyIds.map(pid => ({ client_id: newClient.id, property_id: Number(pid) }));
+        const { data: linkData, error: linkError } = await withRetry(() => sb.from("cm_client_properties").insert(links).select());
+        showErr(linkError);
+        setClients(cs => [...cs, newClient]);
+        if (linkData)
+            setClientProperties(cps => [...cps, ...linkData]);
+        setLastInviteCode(newClient);
+        closeModal();
+    };
+    const deleteClient = async (c) => {
+        if (!window.confirm(`Remove "${c.full_name}" and revoke their portal access?`))
+            return;
+        await sb.from("cm_client_properties").delete().eq("client_id", c.id);
+        const { error } = await sb.from("cm_clients").delete().eq("id", c.id);
+        showErr(error);
+        if (!error) {
+            setClients(cs => cs.filter(x => x.id !== c.id));
+            setClientProperties(cps => cps.filter(x => x.client_id !== c.id));
+        }
+    };
+    const emailClientPortalLink = (c) => {
+        const subject = encodeURIComponent("Your Project Portal Access");
+        const body = encodeURIComponent(`Hi ${c.full_name},\n\nYou can track daily progress, inspections, and change orders for your project(s) here:\n\n${clientPortalLink(c)}\n\nJust open the link any time — no password needed.`);
+        openMailto(`mailto:${c.email || ""}?subject=${subject}&body=${body}`);
+    };
     const addContract = async () => {
         if (!form.propertyId || !form.contractFile)
             return;
@@ -2623,7 +2674,7 @@ function App() {
                 tab === "Materials" && React.createElement("button", { style: btnP, onClick: () => openModal("material") }, "+ Add Material"),
                 tab === "Inspections" && !viewInspection && React.createElement("button", { style: btnP, onClick: () => openModal("inspection") }, "+ New Inspection"),
                 tab === "Change Orders" && React.createElement("button", { style: btnP, onClick: () => openModal("changeOrder") }, "+ New Change Order"),
-                tab === "Client Requests" && React.createElement("button", { style: btnP, onClick: () => openModal("inviteTenant") }, "+ Invite Client"),
+                tab === "Client Requests" && React.createElement("button", { style: btnP, onClick: () => openModal("addClient") }, "+ Add Client"),
                 tab === "Contracts" && React.createElement("button", { style: btnP, onClick: () => openModal("contract") }, "+ Upload Contract"),
                 tab === "Blueprints" && React.createElement("button", { style: btnP, onClick: () => openModal("blueprint") }, "+ Upload Blueprint"),
                 tab === "CM Forms" && React.createElement("button", { style: btnP, onClick: () => openModal("cmForm") }, "+ Upload Form"),
@@ -2640,38 +2691,31 @@ function App() {
                     React.createElement("button", { style: btnP, onClick: () => openModal("resourceLink") }, "+ Add Link"))),
             loadingData && React.createElement("div", { style: { color: C.muted } }, "Loading your data..."),
             !loadingData && tab === "Help" && React.createElement(HelpTab, null),
-            !loadingData && tab === "Client Requests" && React.createElement("div", null,
-                lastInviteCode && React.createElement("div", { style: { background: "#fff", padding: 16, borderRadius: 10, border: "2px solid " + C.accent, marginBottom: 20 } },
-                    React.createElement("div", { style: { fontWeight: 700, marginBottom: 6 } }, "Invite Created"),
-                    React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 10 } }, lastInviteCode.full_name),
-                    React.createElement("div", { style: { fontFamily: "monospace", fontSize: 20, fontWeight: 700, background: C.bg, padding: "8px 12px", borderRadius: 6, display: "inline-block", marginBottom: 10 } }, lastInviteCode.invite_code),
-                    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
-                        React.createElement("button", { style: { ...btnS, padding: "6px 12px", fontSize: 12 }, onClick: () => emailTenantInvite(tenants.find(t => t.id === lastInviteCode.id) || lastInviteCode) }, "Email Invite"),
-                        React.createElement("button", { style: { ...btnS, padding: "6px 12px", fontSize: 12 }, onClick: () => setLastInviteCode(null) }, "Dismiss"))),
-                React.createElement("h3", { style: { color: C.navy, fontSize: 15, marginBottom: 8 } }, "Clients"),
-                tenants.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 20 } }, "No clients yet.") : tenants.map(t => React.createElement("div", { key: t.id, style: { background: "#fff", padding: 14, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 8 } },
-                    React.createElement("div", { style: { fontWeight: 700 } }, t.full_name),
-                    React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, t.email || "No email", " — ", t.invite_status),
-                    t.invite_status === "pending" && React.createElement("div", { style: { fontFamily: "monospace", fontSize: 13, color: C.accent, marginTop: 4 } }, "Code: ", t.invite_code),
-                    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 } },
-                        t.invite_status === "pending" && React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => emailTenantInvite(t) }, "Email Invite"),
-                        React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => openEditTenant(t) }, "Edit"),
-                        React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12, color: C.red }, onClick: () => deleteTenant(t) }, "Delete")))),
-                React.createElement("h3", { style: { color: C.navy, fontSize: 15, marginBottom: 8, marginTop: 20 } }, "Repair Requests"),
-                tenantRequests.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No repair requests yet.") : renderGroupedCards(tenantRequests, req => React.createElement("div", { key: req.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10 } },
-                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" } },
-                        React.createElement("div", { style: { fontWeight: 700 } }, req.description),
-                        React.createElement("span", { style: { background: requestStatusColor(req.status), color: "#fff", borderRadius: 100, padding: "3px 10px", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" } }, requestStatusLabel(req.status))),
-                    React.createElement("div", { style: { color: C.muted, fontSize: 12, marginTop: 6 } }, propName(req.property_id), " \u2014 ", req.urgency, " priority"),
-                    req.photo_url && React.createElement("img", { src: req.photo_url, style: { maxWidth: 160, borderRadius: 6, marginTop: 8, display: "block" } }),
-                    req.linked_repair_id && React.createElement("div", { style: { color: C.green, fontSize: 12, marginTop: 8 } }, "\u2713 Tracked in Repairs"),
-                    React.createElement("div", { style: { marginTop: 10 } },
-                        React.createElement("input", { style: { ...inp, marginBottom: 6 }, placeholder: "Note to client (optional)", defaultValue: req.landlord_note || "", onBlur: e => { if (e.target.value !== (req.landlord_note || "")) saveRequestNote(req.id, e.target.value); } })),
-                    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 } },
-                        !req.linked_repair_id && React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => pushRequestToRepairs(req) }, "Push to Repairs"),
-                        req.status !== "in_progress" && req.status !== "completed" && React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => updateRequestStatus(req.id, "in_progress") }, "Mark In Progress"),
-                        req.status !== "completed" && React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => updateRequestStatus(req.id, "completed") }, "Mark Completed"),
-                        req.linked_repair_id && req.status === "completed" && React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12, color: C.red }, onClick: () => deleteTenantRequest(req) }, "Delete"))))),
+            !loadingData && tab === "Client Requests" && (() => {
+                const renderClient = (c) => {
+                    const linkedPropIds = clientProperties.filter(cp => cp.client_id === c.id).map(cp => cp.property_id);
+                    const addresses = linkedPropIds.map(pid => propName(pid)).join(", ") || "No job sites linked";
+                    return React.createElement("div", { key: c.id, style: { background: "#fff", padding: 14, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 8 } },
+                        React.createElement("div", { style: { fontWeight: 700 } }, c.full_name),
+                        c.company_name && React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, c.company_name),
+                        React.createElement("div", { style: { color: C.muted, fontSize: 13, marginTop: 4 } }, addresses),
+                        React.createElement("div", { style: { fontFamily: "monospace", fontSize: 13, color: C.accent, marginTop: 6 } }, "Code: ", c.invite_code),
+                        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 } },
+                            React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => emailClientPortalLink(c) }, "Email Portal Link"),
+                            React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => setLastInviteCode(c) }, "Show Link"),
+                            React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12, color: C.red }, onClick: () => deleteClient(c) }, "Delete")));
+                };
+                return React.createElement("div", null,
+                    lastInviteCode && React.createElement("div", { style: { background: "#fff", padding: 16, borderRadius: 10, border: "2px solid " + C.accent, marginBottom: 20 } },
+                        React.createElement("div", { style: { fontWeight: 700, marginBottom: 6 } }, "Portal Link Ready"),
+                        React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 10 } }, lastInviteCode.full_name),
+                        React.createElement("div", { style: { fontSize: 13, wordBreak: "break-all", background: C.bg, padding: "8px 12px", borderRadius: 6, marginBottom: 10 } }, clientPortalLink(lastInviteCode)),
+                        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+                            React.createElement("button", { style: { ...btnS, padding: "6px 12px", fontSize: 12 }, onClick: () => emailClientPortalLink(lastInviteCode) }, "Email Portal Link"),
+                            React.createElement("button", { style: { ...btnS, padding: "6px 12px", fontSize: 12 }, onClick: () => setLastInviteCode(null) }, "Dismiss"))),
+                    React.createElement("h3", { style: { color: C.navy, fontSize: 15, marginBottom: 8 } }, "Clients"),
+                    clients.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No clients yet. Add one to give them a portal link for their project(s).") : clients.map(renderClient));
+            })(),
             !loadingData && tab === "Dashboard" && (React.createElement(React.Fragment, null,
                 React.createElement("div", { style: { background: "linear-gradient(135deg, " + C.navy + " 0%, #2d4270 60%, " + C.accent + " 130%)", borderRadius: 16, padding: "24px 22px", marginBottom: 18, color: "#fff", boxShadow: "0 4px 14px rgba(26,39,68,0.25)" } },
                     React.createElement("div", { style: { fontSize: 13, opacity: 0.85, fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase" } }, "Welcome back"),
@@ -4082,23 +4126,26 @@ function App() {
         React.createElement("button", { style: btnP, onClick: addResourceLink }, "Add"),
         React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
         viewImage && React.createElement(ImageViewer, { url: viewImage, onClose: () => setViewImage(null) }),
-        modal === "inviteTenant" && (React.createElement(Modal, { title: "Invite Client", onClose: closeModal },
-    React.createElement("select", { style: inp, value: form.tenantPropertyId || "", onChange: e => {
-        const propId = e.target.value;
-        const prop = properties.find(p => String(p.id) === propId);
-        // Only fill in fields the person hasn't already typed something
-        // into — previously this always overwrote them (even with a blank
-        // value if the property had none on file), which could silently
-        // wipe out an email/name/phone someone had just typed in.
-        setForm(f => ({ ...f, tenantPropertyId: propId, tenantFullName: f.tenantFullName || (prop ? (prop.tenant || "") : ""), tenantInviteEmail: f.tenantInviteEmail || (prop ? (prop.tenant_email || "") : ""), tenantInvitePhone: f.tenantInvitePhone || (prop ? (prop.tenant_phone || "") : "") }));
-    } },
-        React.createElement("option", { value: "" }, "Select job site\u2026"),
-        properties.map(p => React.createElement("option", { key: p.id, value: p.id }, p.address))),
-    React.createElement("input", { style: inp, placeholder: "Tenant Full Name", value: form.tenantFullName || "", onChange: e => setF("tenantFullName", e.target.value) }),
-    React.createElement("input", { style: inp, type: "email", placeholder: "Tenant Email (optional)", value: form.tenantInviteEmail || "", onChange: e => setF("tenantInviteEmail", e.target.value) }),
-    React.createElement("input", { style: inp, placeholder: "Tenant Phone (optional)", value: form.tenantInvitePhone || "", onChange: e => setF("tenantInvitePhone", e.target.value) }),
+        modal === "addClient" && (React.createElement(Modal, { title: "Add Client", onClose: closeModal },
+    React.createElement("input", { style: inp, placeholder: "Full Name", value: form.clientFullName || "", onChange: e => setF("clientFullName", e.target.value) }),
+    React.createElement("input", { style: inp, placeholder: "Company Name (optional)", value: form.clientCompanyName || "", onChange: e => setF("clientCompanyName", e.target.value) }),
+    React.createElement("input", { style: inp, type: "email", placeholder: "Email (optional)", value: form.clientEmail || "", onChange: e => setF("clientEmail", e.target.value) }),
+    React.createElement("input", { style: inp, placeholder: "Phone (optional)", value: form.clientPhone || "", onChange: e => setF("clientPhone", e.target.value) }),
+    React.createElement("label", { style: { fontSize: 13, color: C.muted, display: "block", marginBottom: 6, marginTop: 4 } }, "Job Site(s) — select all that apply"),
+    properties.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 10 } }, "Add a job site first.") :
+    React.createElement("div", { style: { marginBottom: 12, maxHeight: 200, overflowY: "auto", border: "1px solid " + C.border, borderRadius: 8, padding: 8 } },
+        properties.map(p => {
+            const selected = form.clientPropertyIds || [];
+            const isChecked = selected.includes(String(p.id));
+            return React.createElement("label", { key: p.id, style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", fontSize: 14, cursor: "pointer" } },
+                React.createElement("input", { type: "checkbox", checked: isChecked, onChange: e => {
+                    const next = e.target.checked ? [...selected, String(p.id)] : selected.filter(id => id !== String(p.id));
+                    setF("clientPropertyIds", next);
+                } }),
+                p.address);
+        })),
     React.createElement("div", { style: { display: "flex", gap: 10 } },
-        React.createElement("button", { style: btnP, onClick: addTenantInvite }, "Create Invite"),
+        React.createElement("button", { style: btnP, onClick: addClient }, "Add Client"),
         React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
         modal === "editTenant" && (React.createElement(Modal, { title: "Edit Tenant", onClose: closeModal },
     React.createElement("input", { style: inp, placeholder: "Tenant Full Name", value: form.tenantFullName || "", onChange: e => setF("tenantFullName", e.target.value) }),
