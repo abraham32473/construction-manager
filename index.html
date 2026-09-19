@@ -1241,14 +1241,27 @@ function App() {
         const files = Array.from(e.target.files || []);
         if (files.length === 0)
             return;
-        const compressedList = [];
+        e.target.value = "";
+        setF("dailyLogPhotoUploading", true);
         for (const file of files) {
             if (file.size === 0)
                 continue;
-            compressedList.push(await compressImage(file));
+            try {
+                const compressed = await compressImage(file);
+                const fileName = `${userId()}/dailylogs/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${compressed.name}`;
+                const { error: upErr } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, compressed));
+                if (upErr) {
+                    alert(`One of the photos ("${file.name}") failed to upload: ${upErr.message}. The others will still be added — try that one again.`);
+                    continue;
+                }
+                const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
+                setForm(f => ({ ...f, dailyLogPhotoUrls: [...(f.dailyLogPhotoUrls || []), urlData.publicUrl] }));
+            }
+            catch (e) {
+                alert(`One of the photos ("${file.name}") failed to upload. The others will still be added — try that one again.`);
+            }
         }
-        setF("dailyLogPhotoFiles", [...(form.dailyLogPhotoFiles || []), ...compressedList]);
-        e.target.value = "";
+        setF("dailyLogPhotoUploading", false);
     };
     const userId = () => session.user.id;
     const showErr = (error) => {
@@ -1880,16 +1893,7 @@ function App() {
             alert("Please select a job site and date.");
             return;
         }
-        const files = form.dailyLogPhotoFiles || [];
-        const photoUrls = [];
-        for (const file of files) {
-            const fileName = `${userId()}/dailylogs/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${file.name}`;
-            const { error: upErr } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, file));
-            if (!upErr) {
-                const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
-                photoUrls.push(urlData.publicUrl);
-            }
-        }
+        const photoUrls = form.dailyLogPhotoUrls || [];
         const { data, error } = await withRetry(() => sb.from("cm_daily_logs").insert({
             user_id: userId(),
             property_id: Number(form.propertyId),
@@ -2720,7 +2724,7 @@ function App() {
                 tab === "Contracts" && React.createElement("button", { style: btnP, onClick: () => openModal("contract") }, "+ Upload Contract"),
                 tab === "Blueprints" && React.createElement("button", { style: btnP, onClick: () => openModal("blueprint") }, "+ Upload Blueprint"),
                 tab === "CM Forms" && React.createElement("button", { style: btnP, onClick: () => openModal("cmForm") }, "+ Upload Form"),
-                tab === "Daily Logs" && React.createElement("button", { style: btnP, onClick: () => openModal("dailyLog") }, "+ Add Daily Log"),
+                tab === "Daily Logs" && React.createElement("button", { style: btnP, onClick: () => { openModal("dailyLog"); setF("dailyLogDate", new Date().toISOString().slice(0, 10)); } }, "+ Add Daily Log"),
                 tab === "Payments" && React.createElement("button", { style: btnP, onClick: () => openModal("payment") }, "+ Log Payment"),
                 tab === "Grounds & Exterior Care" && React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
                     React.createElement("button", { style: btnP, onClick: () => openModal("lawnCare") }, "+ Add Recurring Service"),
@@ -4071,12 +4075,13 @@ function App() {
             React.createElement("input", { style: inp, type: "number", placeholder: "Crew count", value: form.dailyLogCrewCount || "", onChange: e => setF("dailyLogCrewCount", e.target.value) }),
             React.createElement("textarea", { style: { ...inp, minHeight: 70 }, placeholder: "Work performed today\u2026", value: form.dailyLogWork || "", onChange: e => setF("dailyLogWork", e.target.value) }),
             React.createElement("textarea", { style: { ...inp, minHeight: 60 }, placeholder: "Notes (delays, issues, deliveries, visitors, etc.)", value: form.dailyLogNotes || "", onChange: e => setF("dailyLogNotes", e.target.value) }),
-            React.createElement("label", { style: { fontSize: 13, color: C.muted, display: "block", marginBottom: 4 } }, "Photos"),
-            React.createElement("input", { style: inp, type: "file", accept: "image/*", multiple: true, capture: "environment", onChange: handleDailyLogPhotos }),
-            form.dailyLogPhotoFiles && form.dailyLogPhotoFiles.length > 0 && React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 } },
-                form.dailyLogPhotoFiles.map((f, i) => React.createElement("div", { key: i, style: { position: "relative" } },
-                    React.createElement("img", { src: URL.createObjectURL(f), style: { width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: "1px solid " + C.border } }),
-                    React.createElement("button", { style: { position: "absolute", top: -6, right: -6, background: C.red, color: "#fff", border: "none", borderRadius: "50%", width: 20, height: 20, fontSize: 12, lineHeight: "20px", cursor: "pointer" }, onClick: () => setF("dailyLogPhotoFiles", form.dailyLogPhotoFiles.filter((_, idx) => idx !== i)) }, "\u00d7")))),
+            React.createElement("label", { style: { fontSize: 13, color: C.muted, display: "block", marginBottom: 4 } }, "Photos \u2014 tip: take your photos with your camera app first, then tap below and choose \"Photos\" to add them all at once"),
+            React.createElement("input", { style: inp, type: "file", accept: "image/*", multiple: true, onChange: handleDailyLogPhotos }),
+            form.dailyLogPhotoUploading && React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 8 } }, "Uploading\u2026"),
+            form.dailyLogPhotoUrls && form.dailyLogPhotoUrls.length > 0 && React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 } },
+                form.dailyLogPhotoUrls.map((url, i) => React.createElement("div", { key: i, style: { position: "relative" } },
+                    React.createElement("img", { src: url, style: { width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: "1px solid " + C.border } }),
+                    React.createElement("button", { style: { position: "absolute", top: -6, right: -6, background: C.red, color: "#fff", border: "none", borderRadius: "50%", width: 20, height: 20, fontSize: 12, lineHeight: "20px", cursor: "pointer" }, onClick: () => setF("dailyLogPhotoUrls", form.dailyLogPhotoUrls.filter((_, idx) => idx !== i)) }, "\u00d7")))),
             React.createElement("div", { style: { display: "flex", gap: 10 } },
                 React.createElement("button", { style: btnP, onClick: addDailyLog }, "Save Log"),
                 React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
