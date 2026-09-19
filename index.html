@@ -3253,12 +3253,13 @@ function App() {
             !loadingData && tab === "Payments" && (properties.length === 0 ? (React.createElement("div", { style: { color: C.muted } }, "Add a job site first, then you can log payments for it.")) : (properties.map(p => {
     const pPayments = payments.filter(pm => pm.property_id === p.id);
     const totalPaid = pPayments.reduce((s, pm) => s + Number(pm.amount || 0), 0);
-    const budget = Number(p.rent) || 0;
-    const remaining = budget - totalPaid;
+    const signedCOTotal = changeOrders.filter(co => co.property_id === p.id && co.status === "Signed").reduce((s, co) => s + Number(co.cost_impact || 0), 0);
+    const contractTotal = (Number(p.rent) || 0) + signedCOTotal;
+    const remaining = contractTotal - totalPaid;
     return (React.createElement("div", { key: p.id, style: { marginBottom: 24 } },
         React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 4 } }, p.address),
         React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 10 } },
-            "Job Budget: $" + budget.toLocaleString() + "   \u2014   Paid: $" + totalPaid.toLocaleString() + "   \u2014   Remaining: $" + remaining.toLocaleString()),
+            "Contract: $" + contractTotal.toLocaleString() + (signedCOTotal !== 0 ? " (Budget $" + Number(p.rent || 0).toLocaleString() + " + Signed COs $" + signedCOTotal.toLocaleString() + ")" : "") + "   \u2014   Paid: $" + totalPaid.toLocaleString() + "   \u2014   Remaining: $" + remaining.toLocaleString()),
         pPayments.length === 0 ? (React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 16 } }, "No payments logged yet.")) : (pPayments.slice().reverse().map(pm => (React.createElement("div", { key: pm.id, style: { background: "#fff", padding: 14, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
             React.createElement("div", null,
                 React.createElement("div", { style: { fontWeight: 700 } }, pm.type + ": $" + Number(pm.amount).toLocaleString()),
