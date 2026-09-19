@@ -1979,10 +1979,22 @@ function App() {
         if (!error)
             setBlueprints(bs => bs.filter(x => x.id !== bp.id));
     };
-    const emailBlueprint = (bp) => {
+    const emailBlueprint = (bp, toEmail) => {
         const subject = encodeURIComponent(`Blueprint: ${bp.title} \u2014 ${propName(bp.property_id)}`);
         const body = encodeURIComponent(`Please see the blueprint below for ${propName(bp.property_id)}:\n\n${bp.file_url}\n\nTitle: ${bp.title}`);
-        openMailto(`mailto:?subject=${subject}&body=${body}`);
+        openMailto(`mailto:${toEmail || ""}?subject=${subject}&body=${body}`);
+    };
+    const sendBlueprintToSub = () => {
+        const bp = blueprints.find(x => x.id === form.emailBlueprintId);
+        if (!bp)
+            return;
+        const contractor = contractors.find(c => c.id === Number(form.emailToContractorId));
+        if (!contractor || !contractor.email) {
+            alert("That subcontractor doesn't have an email on file. Add one under Subcontractors first.");
+            return;
+        }
+        emailBlueprint(bp, contractor.email);
+        closeModal();
     };
     const addCmForm = async () => {
         if (!form.propertyId || !form.cmFormFile)
@@ -3255,7 +3267,7 @@ function App() {
                             isImageFile(bp.file_url) ? React.createElement("img", { src: bp.file_url, style: { maxWidth: 120, borderRadius: 6, marginTop: 6, display: "block", cursor: "pointer" }, onClick: () => setViewImage(bp.file_url) }) : bp.file_url && React.createElement(PdfThumbnail, { url: bp.file_url, size: 120, onClick: () => window.open(bp.file_url, "_blank") })),
                             React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
                                 isImageFile(bp.file_url) ? React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => setViewImage(bp.file_url) }, "View") : React.createElement("a", { href: bp.file_url, target: "_blank", rel: "noopener noreferrer", style: { ...btnS, padding: "5px 10px", fontSize: 12, textDecoration: "none", display: "inline-block" } }, "View"),
-                                React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => emailBlueprint(bp) }, "Email to Sub"),
+                                React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => { setForm({ emailBlueprintId: bp.id }); setModal("emailBlueprint"); } }, "Email to Sub"),
                                 React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => { if (isImageFile(bp.file_url)) { setPrintDoc({ title: bp.title, url: bp.file_url, isImage: true }); setTimeout(() => window.print(), 400); } else { window.open(bp.file_url, "_blank"); } } }, "Print"),
                                 React.createElement("button", { style: btnDangerSm, onClick: () => deleteBlueprint(bp) }, "Delete")))))));
                 })),
@@ -4298,6 +4310,18 @@ function App() {
             React.createElement("input", { style: inp, type: "file", onChange: e => setF("blueprintFile", e.target.files[0]) }),
             React.createElement("div", { style: { display: "flex", gap: 10 } },
                 React.createElement("button", { style: btnP, onClick: addBlueprint }, "Upload"),
+                React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
+        modal === "emailBlueprint" && (React.createElement(Modal, { title: "Email Blueprint to Sub", onClose: closeModal },
+            contractors.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 10 } }, "No subcontractors on file yet. Add one under Subcontractors first.") :
+            React.createElement("select", { style: inp, value: form.emailToContractorId || "", onChange: e => setF("emailToContractorId", e.target.value) },
+                React.createElement("option", { value: "" }, "Select subcontractor\u2026"),
+                contractors.map(c => React.createElement("option", { key: c.id, value: c.id },
+                    c.name,
+                    " \u2014 ",
+                    c.trade,
+                    c.email ? "" : " (no email on file)"))),
+            React.createElement("div", { style: { display: "flex", gap: 10 } },
+                React.createElement("button", { style: btnP, onClick: sendBlueprintToSub }, "Open Email"),
                 React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
         modal === "cmForm" && (React.createElement(Modal, { title: "Upload Special Inspection / Form", onClose: closeModal },
             React.createElement("select", { style: inp, value: form.propertyId || "", onChange: e => setF("propertyId", e.target.value) },
