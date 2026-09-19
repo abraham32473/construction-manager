@@ -579,17 +579,32 @@ async function compressImage(file, maxDim = 1600, quality = 0.85) {
         return file;
     }
 }
-function PhotoPicker({ idPrefix, label, file, onSelect, resetKey }) {
-    const [previewUrl, setPreviewUrl] = useState(null);
-    useEffect(() => {
-        if (!file) {
-            setPreviewUrl(null);
+function PhotoPicker({ idPrefix, label, url, onUploaded, resetKey, folder, userIdVal }) {
+    const [uploading, setUploading] = useState(false);
+    const onSelect = async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (!file)
             return;
+        setUploading(true);
+        try {
+            const compressed = await compressImage(file);
+            const fileName = `${userIdVal}/${folder || "photos"}/${Date.now()}_${compressed.name}`;
+            const { error } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, compressed));
+            if (error) {
+                alert(`The photo failed to upload: ${error.message}. Please try again.`);
+                return;
+            }
+            const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
+            onUploaded(urlData.publicUrl);
         }
-        const url = URL.createObjectURL(file);
-        setPreviewUrl(url);
-        return () => URL.revokeObjectURL(url);
-    }, [file]);
+        catch (err) {
+            alert("The photo failed to upload. Please try again.");
+        }
+        finally {
+            setUploading(false);
+        }
+    };
     return (React.createElement("div", null,
         React.createElement("label", { style: { fontSize: 12, color: C.muted, display: "block", marginBottom: 4 } }, label),
         React.createElement("div", { style: { display: "flex", gap: 10, marginBottom: 6 } },
@@ -597,8 +612,9 @@ function PhotoPicker({ idPrefix, label, file, onSelect, resetKey }) {
             React.createElement("input", { key: idPrefix + "-camera-" + resetKey, id: idPrefix + "-camera", style: { display: "none" }, type: "file", accept: "image/*", capture: "environment", onChange: onSelect }),
             React.createElement("label", { htmlFor: idPrefix + "-gallery", style: { ...btnS, flex: 1, textAlign: "center", cursor: "pointer", display: "block", boxSizing: "border-box" } }, "Gallery"),
             React.createElement("input", { key: idPrefix + "-gallery-" + resetKey, id: idPrefix + "-gallery", style: { display: "none" }, type: "file", accept: "image/*", onChange: onSelect })),
-        previewUrl && React.createElement("div", { style: { marginBottom: 10 } },
-            React.createElement("img", { src: previewUrl, style: { maxWidth: 160, maxHeight: 160, borderRadius: 8, display: "block", border: "1px solid " + C.border } }),
+        uploading && React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 8 } }, "Uploading\u2026"),
+        url && React.createElement("div", { style: { marginBottom: 10 } },
+            React.createElement("img", { src: url, style: { maxWidth: 160, maxHeight: 160, borderRadius: 8, display: "block", border: "1px solid " + C.border } }),
             React.createElement("div", { style: { fontSize: 12, color: C.green, marginTop: 4, fontWeight: 600 } }, "\u2713 Photo attached"))));
 }
 function PdfThumbnail({ url, size, onClick }) {
@@ -1325,18 +1341,7 @@ function App() {
             return;
         setSubmitting(true);
         try {
-            let photoUrl = null;
-            if (form.photoFile) {
-                const fileName = `${userId()}/${Date.now()}_${form.photoFile.name}`;
-                const { error: upErr } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, form.photoFile));
-                if (!upErr) {
-                    const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
-                    photoUrl = urlData.publicUrl;
-                }
-                else {
-                    alert("The photo upload had trouble connecting, so this repair will be saved without it. You can add a photo later if needed.");
-                }
-            }
+            const photoUrl = form.photoUrl || null;
             const { data, error } = await withRetry(() => sb.from("cm_repairs").insert({ user_id: userId(), property_id: Number(form.propertyId), title: form.title, priority: form.priority || "Medium", status: "Open", cost: Number(form.cost) || 0, notes: form.notes || "", trade: form.trade || "General", photo_url: photoUrl, contractor_id: form.repairContractorId ? Number(form.repairContractorId) : null }).select());
             showErr(error);
             if (data)
@@ -1354,18 +1359,7 @@ function App() {
     const updateRepair = async () => {
         if (!form.repairId || !form.title || !form.propertyId)
             return;
-        let photoUrl = form.existingPhotoUrl || null;
-        if (form.photoFile) {
-            const fileName = `${userId()}/${Date.now()}_${form.photoFile.name}`;
-            const { error: upErr } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, form.photoFile));
-            if (!upErr) {
-                const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
-                photoUrl = urlData.publicUrl;
-            }
-            else {
-                alert("The photo upload had trouble connecting, so the existing photo (if any) was kept. Try again once you have a better connection.");
-            }
-        }
+        const photoUrl = form.photoUrl !== undefined ? form.photoUrl : (form.existingPhotoUrl || null);
         const { error } = await withRetry(() => sb.from("cm_repairs").update({ property_id: Number(form.propertyId), title: form.title, trade: form.trade || "General", priority: form.priority || "Medium", cost: Number(form.cost) || 0, notes: form.notes || "", contractor_id: form.repairContractorId ? Number(form.repairContractorId) : null, photo_url: photoUrl }).eq("id", form.repairId));
         showErr(error);
         if (!error) {
@@ -1793,18 +1787,7 @@ function App() {
         setSubmitting(true);
         try {
             const insp = inspections.find(i => i.id === inspectionId);
-            let photoUrl = null;
-            if (form.sectionPhoto) {
-                const fileName = `${userId()}/${Date.now()}_${form.sectionPhoto.name}`;
-                const { error: upErr } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, form.sectionPhoto));
-                if (!upErr) {
-                    const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
-                    photoUrl = urlData.publicUrl;
-                }
-                else {
-                    alert("The photo upload had trouble connecting, so this section will be saved without it. You can try adding a photo again after.");
-                }
-            }
+            const photoUrl = form.sectionPhotoUrl || null;
             const newSections = [...(insp.sections || []), { name: form.sectionName, contractorId: form.sectionContractor || null, photoUrl, notes: form.sectionNotes || "" }];
             const { error } = await withRetry(() => sb.from("cm_inspections").update({ sections: newSections }).eq("id", inspectionId));
             showErr(error);
@@ -1862,18 +1845,7 @@ function App() {
         setSubmitting(true);
         try {
             const pl = punchLists.find(x => x.id === punchListId);
-            let photoUrl = null;
-            if (form.punchItemPhoto) {
-                const fileName = `${userId()}/${Date.now()}_${form.punchItemPhoto.name}`;
-                const { error: upErr } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, form.punchItemPhoto));
-                if (!upErr) {
-                    const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
-                    photoUrl = urlData.publicUrl;
-                }
-                else {
-                    alert("The photo upload had trouble connecting, so this item will be saved without it. You can try adding a photo again after.");
-                }
-            }
+            const photoUrl = form.punchItemPhotoUrl || null;
             const newSections = [...(pl.sections || []), { name: form.punchItemName, contractorId: form.punchItemContractor || null, photoUrl, notes: form.punchItemNotes || "", resolved: false }];
             const { error } = await withRetry(() => sb.from("cm_punch_lists").update({ sections: newSections }).eq("id", punchListId));
             showErr(error);
@@ -2305,18 +2277,7 @@ function App() {
         const name = form.profileName !== undefined ? form.profileName : (profile ? profile.full_name : "");
         const companyName = form.profileCompanyName !== undefined ? form.profileCompanyName : (profile ? profile.company_name : "");
         const licenseNumber = form.profileLicenseNumber !== undefined ? form.profileLicenseNumber : (profile ? profile.license_number : "");
-        let signatureUrl = profile ? profile.signature_url : null;
-        if (form.profileSignatureFile) {
-            const fileName = `${userId()}/signature/${Date.now()}_${form.profileSignatureFile.name}`;
-            const { error: upErr } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, form.profileSignatureFile));
-            if (!upErr) {
-                const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
-                signatureUrl = urlData.publicUrl;
-            }
-            else {
-                alert("Couldn't upload the signature image right now. Your name was still saved — try the signature again once you have a better connection.");
-            }
-        }
+        let signatureUrl = form.profileSignatureUrl !== undefined ? form.profileSignatureUrl : (profile ? profile.signature_url : null);
         const { data, error } = await withRetry(() => sb.from("profiles").upsert({ user_id: userId(), full_name: name || null, company_name: companyName || null, license_number: licenseNumber || null, signature_url: signatureUrl }).select());
         showErr(error);
         if (data && data[0]) {
@@ -2792,6 +2753,7 @@ function App() {
             amount: Number(form.paymentAmount) || 0,
             payment_date: form.paymentDate || new Date().toISOString().slice(0, 10),
             notes: form.notes || "",
+            photo_url: form.paymentPhotoUrl || null,
         }).select());
         showErr(error);
         if (data)
@@ -3414,7 +3376,7 @@ function App() {
     profile && profile.signature_url && !form.profileSignatureFile && (React.createElement("div", { style: { marginBottom: 14 } },
         React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 6 } }, "Current signature:"),
         React.createElement("img", { src: profile.signature_url, style: { maxWidth: 180, display: "block", border: "1px solid " + C.border, borderRadius: 6, padding: 8, background: "#fff" } }))),
-    React.createElement(PhotoPicker, { idPrefix: "profile-signature", label: profile && profile.signature_url ? "Replace Signature" : "Signature", file: form.profileSignatureFile, resetKey: resetKey, onSelect: e => handlePhotoSelect(e, "profileSignatureFile") }),
+    React.createElement(PhotoPicker, { idPrefix: "profile-signature", label: profile && profile.signature_url ? "Replace Signature" : "Signature", url: form.profileSignatureUrl, resetKey: resetKey, folder: "signature", userIdVal: userId(), onUploaded: url => setF("profileSignatureUrl", url) }),
     React.createElement("button", { style: btnP, onClick: saveProfile }, "Save"))),
             !loadingData && tab === "Payments" && (properties.length === 0 ? (React.createElement("div", { style: { color: C.muted } }, "Add a job site first, then you can log payments for it.")) : (properties.map(p => {
     const pPayments = payments.filter(pm => pm.property_id === p.id);
@@ -3429,7 +3391,8 @@ function App() {
         pPayments.length === 0 ? (React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 16 } }, "No payments logged yet.")) : (pPayments.slice().reverse().map(pm => (React.createElement("div", { key: pm.id, style: { background: "#fff", padding: 14, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
             React.createElement("div", null,
                 React.createElement("div", { style: { fontWeight: 700 } }, pm.type + ": $" + Number(pm.amount).toLocaleString()),
-                React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, pm.payment_date, pm.notes ? " — " + pm.notes : "")),
+                React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, pm.payment_date, pm.notes ? " — " + pm.notes : ""),
+                pm.photo_url && React.createElement("img", { src: pm.photo_url, style: { maxWidth: 100, borderRadius: 6, marginTop: 6, display: "block", cursor: "pointer" }, onClick: () => setViewImage(pm.photo_url) })),
             React.createElement("button", { style: btnDangerSm, onClick: () => deletePayment(pm) }, "Delete")))))));
 }))),
             !loadingData && tab === "Inspections" && !viewInspection && (inspections.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "No inspections yet.") : inspections.map(insp => {
@@ -3494,7 +3457,7 @@ function App() {
                                 " \u2014 ",
                                 c.trade))),
                         React.createElement("input", { style: inp, placeholder: "Notes", value: form.sectionNotes || "", onChange: e => setF("sectionNotes", e.target.value) }),
-                        React.createElement(PhotoPicker, { idPrefix: "section-" + insp.id, label: "Photo", file: form.sectionPhoto, resetKey: resetKey, onSelect: e => handlePhotoSelect(e, "sectionPhoto") }),
+                        React.createElement(PhotoPicker, { idPrefix: "section-" + insp.id, label: "Photo", url: form.sectionPhotoUrl, resetKey: resetKey, folder: "inspections", userIdVal: userId(), onUploaded: url => setF("sectionPhotoUrl", url) }),
                         React.createElement("button", { style: { ...btnP, opacity: submitting ? 0.6 : 1 }, disabled: submitting, onClick: () => addInspectionSection(insp.id) }, submitting ? "Saving\u2026" : "Add Section"))));
             })()),
             !loadingData && tab === "Punch List" && !viewPunchList && (punchLists.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "No punch lists yet.") : punchLists.map(pl => {
@@ -3563,7 +3526,7 @@ function App() {
                                 " \u2014 ",
                                 c.trade))),
                         React.createElement("input", { style: inp, placeholder: "Notes", value: form.punchItemNotes || "", onChange: e => setF("punchItemNotes", e.target.value) }),
-                        React.createElement(PhotoPicker, { idPrefix: "punchitem-" + pl.id, label: "Photo", file: form.punchItemPhoto, resetKey: resetKey, onSelect: e => handlePhotoSelect(e, "punchItemPhoto") }),
+                        React.createElement(PhotoPicker, { idPrefix: "punchitem-" + pl.id, label: "Photo", url: form.punchItemPhotoUrl, resetKey: resetKey, folder: "punchlists", userIdVal: userId(), onUploaded: url => setF("punchItemPhotoUrl", url) }),
                         React.createElement("button", { style: { ...btnP, opacity: submitting ? 0.6 : 1 }, disabled: submitting, onClick: () => addPunchListItem(pl.id) }, submitting ? "Saving\u2026" : "Add Item"))));
             })(),
         printChangeOrder && (() => {
@@ -3977,7 +3940,7 @@ function App() {
                 React.createElement("option", null, "Low")),
             React.createElement("input", { style: inp, type: "number", placeholder: "Cost", value: form.cost || "", onChange: e => setF("cost", e.target.value) }),
             React.createElement("input", { style: inp, placeholder: "Notes", value: form.notes || "", onChange: e => setF("notes", e.target.value) }),
-            React.createElement(PhotoPicker, { idPrefix: "repair-photo", label: "Photo", file: form.photoFile, resetKey: resetKey, onSelect: e => handlePhotoSelect(e, "photoFile") }),
+            React.createElement(PhotoPicker, { idPrefix: "repair-photo", label: "Photo", url: form.photoUrl, resetKey: resetKey, folder: "tasks", userIdVal: userId(), onUploaded: url => setF("photoUrl", url) }),
             React.createElement("div", { style: { display: "flex", gap: 10 } },
                 React.createElement("button", { style: { ...btnP, opacity: submitting ? 0.6 : 1 }, disabled: submitting, onClick: addRepair }, submitting ? "Saving\u2026" : "Log Task"),
                 React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
@@ -4004,7 +3967,7 @@ function App() {
             form.existingPhotoUrl && !form.photoFile && React.createElement("div", { style: { marginBottom: 10 } },
                 React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 4 } }, "Current photo:"),
                 React.createElement("img", { src: form.existingPhotoUrl, style: { maxWidth: 160, display: "block", borderRadius: 6 } })),
-            React.createElement(PhotoPicker, { idPrefix: "edit-repair-photo", label: form.existingPhotoUrl ? "Replace Photo" : "Photo", file: form.photoFile, resetKey: resetKey, onSelect: e => handlePhotoSelect(e, "photoFile") }),
+            React.createElement(PhotoPicker, { idPrefix: "edit-repair-photo", label: form.existingPhotoUrl ? "Replace Photo" : "Photo", url: form.photoUrl !== undefined ? form.photoUrl : form.existingPhotoUrl, resetKey: resetKey, folder: "tasks", userIdVal: userId(), onUploaded: url => setF("photoUrl", url) }),
             React.createElement("div", { style: { display: "flex", gap: 10 } },
                 React.createElement("button", { style: btnP, onClick: updateRepair }, "Save Changes"),
                 React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
@@ -4379,6 +4342,7 @@ function App() {
     React.createElement("input", { style: inp, type: "number", placeholder: "Amount Received", value: form.paymentAmount || "", onChange: e => setF("paymentAmount", e.target.value) }),
     React.createElement("input", { style: inp, type: "date", value: form.paymentDate || "", onChange: e => setF("paymentDate", e.target.value) }),
     React.createElement("input", { style: inp, placeholder: "Notes", value: form.notes || "", onChange: e => setF("notes", e.target.value) }),
+    React.createElement(PhotoPicker, { idPrefix: "payment-photo", label: "Photo of Check (optional)", url: form.paymentPhotoUrl, resetKey: resetKey, folder: "payments", userIdVal: userId(), onUploaded: url => setF("paymentPhotoUrl", url) }),
     React.createElement("div", { style: { display: "flex", gap: 10 } },
         React.createElement("button", { style: btnP, onClick: addPayment }, "Save"),
         React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
