@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>Construction Manager</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=optional" rel="stylesheet">
@@ -1088,6 +1091,7 @@ function App() {
     }, [session?.user?.id]);
     const loadAllData = async () => {
         setLoadingData(true);
+        const minDelay = new Promise(resolve => setTimeout(resolve, 500));
         const [p, r, rh, d, c, ins, nt, ct, pm, pt, fm, res, rl, pr, tn, rq, lc, lcp, ut, imp, gs, jc, mt, co, bp, cf] = await Promise.all([
             sb.from("cm_properties").select("*").order("id"),
             sb.from("cm_repairs").select("*").order("id"),
@@ -1170,6 +1174,7 @@ function App() {
             setCmForms(cf.data);
         if (lc.data && lcp.data)
             await ensureLawnCarePayments(lc.data, lcp.data);
+        await minDelay;
         setLoadingData(false);
     };
     const ensureLawnCarePayments = async (lcList, lcpList) => {
