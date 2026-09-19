@@ -219,7 +219,7 @@ function buildYearStatementPdf(p, year, stmt) {
         doc.setFont(undefined, "normal");
         y += 26;
     };
-    section("Punch List", stmt.pRepairs, r => `${r.created_at ? new Date(r.created_at).toLocaleDateString() : ""} \u2014 ${r.trade || "Repair"} \u2014 $${Number(r.cost || 0).toFixed(2)}`, stmt.repairsTotal);
+    section("Tasks", stmt.pRepairs, r => `${r.created_at ? new Date(r.created_at).toLocaleDateString() : ""} \u2014 ${r.trade || "Repair"} \u2014 $${Number(r.cost || 0).toFixed(2)}`, stmt.repairsTotal);
     section("Tenant Damage (Landlord-Paid)", stmt.pDamages, d => `${d.created_at ? new Date(d.created_at).toLocaleDateString() : ""} \u2014 ${d.description || d.severity || "Damage"} \u2014 $${Number(d.estimated_cost || 0).toFixed(2)}`, stmt.damageTotal);
     section("Recurring Grounds Maintenance", stmt.pLawn, l => `${new Date(l.paid_date + "T00:00:00").toLocaleDateString()} \u2014 $${Number(l.amount || 0).toFixed(2)}`, stmt.lawnTotal);
     section("One-Time Grounds & Exterior Services", stmt.pGroundsServices, g => `${new Date(g.date_completed + "T00:00:00").toLocaleDateString()} \u2014 ${g.category}: ${g.description} \u2014 $${Number(g.cost || 0).toFixed(2)}`, stmt.groundsServicesTotal);
@@ -751,7 +751,7 @@ function HelpTab() {
             "Share their portal link (tap Email Portal Link, or copy it yourself) — no password needed, it just opens straight to their project(s).",
             "Clients see Daily Logs, Inspections, and Change Orders for their linked job sites only. Costs and other internal details stay private."
         ]},
-        { key: "repairs", tag: "Maintenance", color: C.blue, title: "Punch List", body: [
+        { key: "repairs", tag: "Maintenance", color: C.blue, title: "Tasks", body: [
             "Log any repair job — trade, priority, cost, and notes — whether it came from a tenant request or you started it yourself.",
             "Assign a contractor and update status as work progresses. Costs here total automatically per property."
         ]},
@@ -770,6 +770,12 @@ function HelpTab() {
         { key: "inspections", tag: "Inspections", color: C.orange, title: "Inspections", body: [
             "Document a property's condition at a specific moment — new acquisition, move-in, move-out, or routine.",
             "A move-in record is your baseline; comparing it to the move-out record shows what's normal wear versus tenant damage."
+        ]},
+        { key: "punchlist", tag: "Walkthrough", color: C.orange, title: "Punch List", body: [
+            "Tap + New Punch List, pick the job site, and give it a title like \"Final Walkthrough\" — this creates one checklist for that walkthrough.",
+            "Add an item for each thing that still needs to be touched up, with a photo, notes, and the contractor responsible if you want.",
+            "As items get fixed, tap Mark Fixed to check them off — the list shows how many are still open at a glance.",
+            "Mark the whole punch list Completed once everything's resolved and the client walkthrough is done."
         ]},
         { key: "contractors", tag: "Contacts", color: C.navy, title: "Subcontractors", body: [
             "Keep your go-to contractors on file so you can assign them to repair jobs without hunting for a phone number."
@@ -863,6 +869,7 @@ function App() {
     const [damages, setDamages] = useState([]);
     const [contractors, setContractors] = useState([]);
     const [inspections, setInspections] = useState([]);
+    const [punchLists, setPunchLists] = useState([]);
     const [notices, setNotices] = useState([]);
     const [contracts, setContracts] = useState([]);
     const [blueprints, setBlueprints] = useState([]);
@@ -924,6 +931,14 @@ function App() {
     const [printChangeOrder, setPrintChangeOrder] = useState(null);
     const [printDamage, setPrintDamage] = useState(null);
     const [printInspection, setPrintInspection] = useState(null);
+    const [viewPunchList, setViewPunchList] = useState(() => { try {
+        const saved = sessionStorage.getItem("pt_viewPunchList");
+        return saved ? Number(saved) : null;
+    }
+    catch (e) {
+        return null;
+    } });
+    const [printPunchList, setPrintPunchList] = useState(null);
     const [printProperty, setPrintProperty] = useState(null);
     const [showReceipts, setShowReceipts] = useState(false);
     const [printReceipts, setPrintReceipts] = useState(null);
@@ -945,6 +960,15 @@ function App() {
         }
         catch (e) { }
     }, [viewInspection]);
+    useEffect(() => {
+        try {
+            if (viewPunchList)
+                sessionStorage.setItem("pt_viewPunchList", String(viewPunchList));
+            else
+                sessionStorage.removeItem("pt_viewPunchList");
+        }
+        catch (e) { }
+    }, [viewPunchList]);
     useEffect(() => {
         try {
             if (viewProperty)
@@ -1094,7 +1118,7 @@ function App() {
     const loadAllData = async () => {
         setLoadingData(true);
         const minDelay = new Promise(resolve => setTimeout(resolve, 500));
-        const [p, r, rh, d, c, ins, nt, ct, pm, pt, fm, res, rl, pr, tn, rq, lc, lcp, ut, imp, gs, jc, mt, co, bp, cf, dl, cl, ccp] = await Promise.all([
+        const [p, r, rh, d, c, ins, nt, ct, pm, pt, fm, res, rl, pr, tn, rq, lc, lcp, ut, imp, gs, jc, mt, co, bp, cf, dl, cl, ccp, plst] = await Promise.all([
             sb.from("cm_properties").select("*").order("id"),
             sb.from("cm_repairs").select("*").order("id"),
             sb.from("rent_history").select("*").order("id"),
@@ -1124,6 +1148,7 @@ function App() {
             sb.from("cm_daily_logs").select("*").order("log_date", { ascending: false }),
             sb.from("cm_clients").select("*").order("full_name"),
             sb.from("cm_client_properties").select("*"),
+            sb.from("cm_punch_lists").select("*").order("created_at", { ascending: false }),
         ]);
         if (p.data)
             setProperties(p.data);
@@ -1183,6 +1208,8 @@ function App() {
             setClients(cl.data);
         if (ccp.data)
             setClientProperties(ccp.data);
+        if (plst.data)
+            setPunchLists(plst.data);
         if (lc.data && lcp.data)
             await ensureLawnCarePayments(lc.data, lcp.data);
         await minDelay;
@@ -1809,6 +1836,131 @@ function App() {
             setInspections(insps => insps.map(i => i.id === form.editingInspectionId ? { ...i, sections: newSections } : i));
             closeModal();
         }
+    };
+    const addPunchList = async () => {
+        if (!form.propertyId || !form.punchListTitle)
+            return;
+        if (submitting)
+            return;
+        setSubmitting(true);
+        try {
+            const { data, error } = await sb.from("cm_punch_lists").insert({ user_id: userId(), property_id: Number(form.propertyId), title: form.punchListTitle, punch_date: form.punchListDate || new Date().toISOString().slice(0, 10), status: "Open", sections: [] }).select();
+            showErr(error);
+            if (data)
+                setPunchLists(pl => [...pl, ...data]);
+            closeModal();
+        }
+        finally {
+            setSubmitting(false);
+        }
+    };
+    const addPunchListItem = async (punchListId) => {
+        if (!form.punchItemName)
+            return;
+        if (submitting)
+            return;
+        setSubmitting(true);
+        try {
+            const pl = punchLists.find(x => x.id === punchListId);
+            let photoUrl = null;
+            if (form.punchItemPhoto) {
+                const fileName = `${userId()}/${Date.now()}_${form.punchItemPhoto.name}`;
+                const { error: upErr } = await withRetry(() => sb.storage.from("landlord-photos").upload(fileName, form.punchItemPhoto));
+                if (!upErr) {
+                    const { data: urlData } = sb.storage.from("landlord-photos").getPublicUrl(fileName);
+                    photoUrl = urlData.publicUrl;
+                }
+                else {
+                    alert("The photo upload had trouble connecting, so this item will be saved without it. You can try adding a photo again after.");
+                }
+            }
+            const newSections = [...(pl.sections || []), { name: form.punchItemName, contractorId: form.punchItemContractor || null, photoUrl, notes: form.punchItemNotes || "", resolved: false }];
+            const { error } = await withRetry(() => sb.from("cm_punch_lists").update({ sections: newSections }).eq("id", punchListId));
+            showErr(error);
+            if (!error) {
+                setPunchLists(pls => pls.map(x => x.id === punchListId ? { ...x, sections: newSections } : x));
+                setForm({});
+                setResetKey(k => k + 1);
+            }
+        }
+        finally {
+            setSubmitting(false);
+        }
+    };
+    const openEditPunchItem = (pl, index) => {
+        const sec = pl.sections[index];
+        setForm({ editingPunchListId: pl.id, editingPunchItemIndex: index, punchItemName: sec.name, punchItemNotes: sec.notes || "", punchItemContractor: sec.contractorId || "" });
+        setModal("editPunchItem");
+    };
+    const updatePunchListItem = async () => {
+        if (form.editingPunchListId == null || form.editingPunchItemIndex == null || !form.punchItemName)
+            return;
+        const pl = punchLists.find(x => x.id === form.editingPunchListId);
+        if (!pl)
+            return;
+        const newSections = pl.sections.map((sec, i) => i === form.editingPunchItemIndex ? { ...sec, name: form.punchItemName, contractorId: form.punchItemContractor || null, notes: form.punchItemNotes || "" } : sec);
+        const { error } = await withRetry(() => sb.from("cm_punch_lists").update({ sections: newSections }).eq("id", form.editingPunchListId));
+        showErr(error);
+        if (!error) {
+            setPunchLists(pls => pls.map(x => x.id === form.editingPunchListId ? { ...x, sections: newSections } : x));
+            closeModal();
+        }
+    };
+    const togglePunchItemResolved = async (pl, index) => {
+        const newSections = pl.sections.map((sec, i) => i === index ? { ...sec, resolved: !sec.resolved } : sec);
+        const { error } = await withRetry(() => sb.from("cm_punch_lists").update({ sections: newSections }).eq("id", pl.id));
+        showErr(error);
+        if (!error)
+            setPunchLists(pls => pls.map(x => x.id === pl.id ? { ...x, sections: newSections } : x));
+    };
+    const deletePunchListItem = async (pl, index) => {
+        if (!window.confirm("Delete this item?"))
+            return;
+        const sec = pl.sections[index];
+        if (sec.photoUrl) {
+            const path = extractStoragePath(sec.photoUrl, "landlord-photos");
+            if (path)
+                await sb.storage.from("landlord-photos").remove([path]);
+        }
+        const newSections = pl.sections.filter((_, i) => i !== index);
+        const { error } = await sb.from("cm_punch_lists").update({ sections: newSections }).eq("id", pl.id);
+        showErr(error);
+        if (!error)
+            setPunchLists(pls => pls.map(x => x.id === pl.id ? { ...x, sections: newSections } : x));
+    };
+    const deletePunchList = async (pl) => {
+        if (!window.confirm(`Delete punch list "${pl.title}"? This will also delete all of its items and photos.`))
+            return;
+        const paths = (pl.sections || []).map(s => extractStoragePath(s.photoUrl, "landlord-photos")).filter(Boolean);
+        if (paths.length)
+            await sb.storage.from("landlord-photos").remove(paths);
+        const { error } = await sb.from("cm_punch_lists").delete().eq("id", pl.id);
+        showErr(error);
+        if (!error) {
+            setPunchLists(pls => pls.filter(x => x.id !== pl.id));
+            if (viewPunchList === pl.id)
+                setViewPunchList(null);
+        }
+    };
+    const updatePunchListStatus = async (id, status) => {
+        const { error } = await sb.from("cm_punch_lists").update({ status }).eq("id", id);
+        showErr(error);
+        if (!error)
+            setPunchLists(pls => pls.map(x => x.id === id ? { ...x, status } : x));
+    };
+    const emailPunchList = (pl) => {
+        const prop = properties.find(p => p.id === pl.property_id);
+        const fullAddress = prop ? prop.address : "Unknown property";
+        const subject = encodeURIComponent(`${pl.title} Punch List \u2014 ${propName(pl.property_id)}`);
+        const itemLines = (pl.sections || []).map(sec => {
+            const contractorLine = sec.contractorId ? ` — ${contractorName(sec.contractorId)}` : "";
+            const notesLine = sec.notes ? `\n  Notes: ${sec.notes}` : "";
+            const photoLine = sec.photoUrl ? `\n  Photo: ${sec.photoUrl}` : "";
+            const statusLine = sec.resolved ? " [RESOLVED]" : " [OPEN]";
+            return `- ${sec.name}${statusLine}${contractorLine}${notesLine}${photoLine}`;
+        }).join("\n");
+        const body = encodeURIComponent(`Property: ${fullAddress}\nPunch List: ${pl.title}\nDate: ${pl.punch_date}\n\nItems:\n${itemLines || "None"}`);
+        openMailto(`mailto:?subject=${subject}&body=${body}`);
     };
     const addNotice = async () => {
         if (!form.propertyId || !form.noticeFile)
@@ -2689,7 +2841,7 @@ function App() {
     if (!session) {
         return React.createElement(AuthScreen, null);
     }
-    const TABS = ["Dashboard", "Help", "Job Sites", "Punch List", "Client Requests", "Inspections", "CM Forms", "Daily Logs", "Subcontractors", "Change Orders", "Contracts", "Blueprints", "Payments", "Budget", "Materials", "My Profile"];
+    const TABS = ["Dashboard", "Help", "Job Sites", "Tasks", "Client Requests", "Inspections", "Punch List", "CM Forms", "Daily Logs", "Subcontractors", "Change Orders", "Contracts", "Blueprints", "Payments", "Budget", "Materials", "My Profile"];
     return (React.createElement("div", { className: "app-root", style: { display: "flex", minHeight: "100vh" } },
         React.createElement("div", { className: "no-print", style: { width: 200, background: C.navy, padding: 20, color: "#fff", flexShrink: 0, display: "flex", flexDirection: "column" } },
             React.createElement("h2", { style: { fontSize: 18, marginBottom: 20 } }, "Construction Manager"),
@@ -2708,9 +2860,9 @@ function App() {
             React.createElement("div", { className: "no-print", style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 } },
                 React.createElement("h1", { style: { color: C.navy } }, tab),
                 tab === "Job Sites" && !viewProperty && React.createElement("button", { style: btnP, onClick: () => openModal("property") }, "+ Add Property"),
-                tab === "Punch List" && React.createElement("button", { style: btnP, onClick: () => openModal("repair") }, "+ Log Task"),
-                tab === "Punch List" && React.createElement("button", { style: btnS, onClick: () => setShowArchivedRepairs(v => !v) }, showArchivedRepairs ? "Hide Archived" : "Show Archived"),
-                tab === "Punch List" && showArchivedRepairs && React.createElement("button", { style: btnS, onClick: cleanupOldArchivedPhotos }, "Clean Up Old Photos"),
+                tab === "Tasks" && React.createElement("button", { style: btnP, onClick: () => openModal("repair") }, "+ Log Task"),
+                tab === "Tasks" && React.createElement("button", { style: btnS, onClick: () => setShowArchivedRepairs(v => !v) }, showArchivedRepairs ? "Hide Archived" : "Show Archived"),
+                tab === "Tasks" && showArchivedRepairs && React.createElement("button", { style: btnS, onClick: cleanupOldArchivedPhotos }, "Clean Up Old Photos"),
                 tab === "Improvements" && React.createElement("button", { style: btnP, onClick: () => openModal("improvement") }, "+ Log Improvement"),
                 tab === "Rent History" && React.createElement("button", { style: btnP, onClick: () => openModal("rent") }, "+ Rent Increase"),
                 tab === "Damage Log" && React.createElement("button", { style: btnP, onClick: () => openModal("damage") }, "+ Log Damage"),
@@ -2719,6 +2871,7 @@ function App() {
                 tab === "Budget" && React.createElement("button", { style: btnP, onClick: () => openModal("jobCost") }, "+ Add Cost"),
                 tab === "Materials" && React.createElement("button", { style: btnP, onClick: () => openModal("material") }, "+ Add Material"),
                 tab === "Inspections" && !viewInspection && React.createElement("button", { style: btnP, onClick: () => openModal("inspection") }, "+ New Inspection"),
+                tab === "Punch List" && !viewPunchList && React.createElement("button", { style: btnP, onClick: () => openModal("punchList") }, "+ New Punch List"),
                 tab === "Change Orders" && React.createElement("button", { style: btnP, onClick: () => openModal("changeOrder") }, "+ New Change Order"),
                 tab === "Client Requests" && React.createElement("button", { style: btnP, onClick: () => openModal("addClient") }, "+ Add Client"),
                 tab === "Contracts" && React.createElement("button", { style: btnP, onClick: () => openModal("contract") }, "+ Upload Contract"),
@@ -2804,6 +2957,7 @@ function App() {
                 const pContracts = contracts.filter(ct => ct.property_id === p.id);
                 const pCmForms = cmForms.filter(cf => cf.property_id === p.id);
                 const pDailyLogs = dailyLogs.filter(dl => dl.property_id === p.id);
+                const pPunchLists = punchLists.filter(pl => pl.property_id === p.id);
                 return (React.createElement("div", null,
                     React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 } },
                         React.createElement("button", { style: btnS, onClick: () => setViewProperty(null) }, "\u2190 Back to Job Sites"),
@@ -2894,9 +3048,21 @@ function App() {
                         React.createElement("div", { style: { fontWeight: 700 } }, new Date(dl.log_date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })),
                         dl.work_performed && React.createElement("div", { style: { fontSize: 14, marginTop: 4, whiteSpace: "pre-wrap" } }, dl.work_performed),
                         dl.photo_urls && dl.photo_urls.length > 0 && React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 } },
-                            dl.photo_urls.map((url, i) => React.createElement("img", { key: i, src: url, style: { width: 70, height: 70, objectFit: "cover", borderRadius: 6, cursor: "pointer", border: "1px solid " + C.border }, onClick: () => setViewImage(url) })))))));
+                            dl.photo_urls.map((url, i) => React.createElement("img", { key: i, src: url, style: { width: 70, height: 70, objectFit: "cover", borderRadius: 6, cursor: "pointer", border: "1px solid " + C.border }, onClick: () => setViewImage(url) })))))),
+                    React.createElement("h3", { style: { color: C.navy, fontSize: 15, marginBottom: 8, marginTop: 16 } },
+                        "Punch List (",
+                        pPunchLists.length,
+                        ")"),
+                    pPunchLists.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No punch lists yet.") : pPunchLists.map(pl => {
+                        const openCount = (pl.sections || []).filter(s => !s.resolved).length;
+                        return React.createElement("div", { key: pl.id, style: { background: "#fff", padding: 14, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }, onClick: () => { setTab("Punch List"); setViewPunchList(pl.id); setForm({}); } },
+                            React.createElement("div", null,
+                                React.createElement("div", { style: { fontWeight: 700 } }, pl.title),
+                                React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, pl.punch_date, " \u2014 ", (pl.sections || []).length, " item(s), ", openCount, " open")),
+                            React.createElement("span", { style: { background: pl.status === "Completed" ? C.green : C.orange, color: "#fff", borderRadius: 100, padding: "2px 9px", fontSize: 11, fontWeight: 600 } }, pl.status || "Open"));
+                    }));
             })(),
-            !loadingData && tab === "Punch List" && (repairs.filter(r => showArchivedRepairs ? r.archived : !r.archived).length === 0 ? React.createElement("div", { style: { color: C.muted } }, showArchivedRepairs ? "No archived repairs." : "No repairs logged yet.") : renderGroupedCards(repairs.filter(r => showArchivedRepairs ? r.archived : !r.archived), r => (React.createElement("div", { key: r.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10 } },
+            !loadingData && tab === "Tasks" && (repairs.filter(r => showArchivedRepairs ? r.archived : !r.archived).length === 0 ? React.createElement("div", { style: { color: C.muted } }, showArchivedRepairs ? "No archived repairs." : "No repairs logged yet.") : renderGroupedCards(repairs.filter(r => showArchivedRepairs ? r.archived : !r.archived), r => (React.createElement("div", { key: r.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10 } },
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
                     React.createElement("div", { style: { fontWeight: 700 } }, r.title),
                     r.archived && React.createElement("span", { style: { background: C.muted, color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 100 } }, "ARCHIVED")),
@@ -3331,6 +3497,75 @@ function App() {
                         React.createElement(PhotoPicker, { idPrefix: "section-" + insp.id, label: "Photo", file: form.sectionPhoto, resetKey: resetKey, onSelect: e => handlePhotoSelect(e, "sectionPhoto") }),
                         React.createElement("button", { style: { ...btnP, opacity: submitting ? 0.6 : 1 }, disabled: submitting, onClick: () => addInspectionSection(insp.id) }, submitting ? "Saving\u2026" : "Add Section"))));
             })()),
+            !loadingData && tab === "Punch List" && !viewPunchList && (punchLists.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "No punch lists yet.") : punchLists.map(pl => {
+                const openCount = (pl.sections || []).filter(s => !s.resolved).length;
+                return (React.createElement("div", { key: pl.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" } },
+                    React.createElement("div", { onClick: () => { setViewPunchList(pl.id); setForm({}); }, style: { cursor: "pointer", flex: 1, minWidth: 180 } },
+                        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+                            React.createElement("div", { style: { fontWeight: 700 } },
+                                pl.title,
+                                " \u2014 ",
+                                propName(pl.property_id)),
+                            React.createElement("span", { style: { background: pl.status === "Completed" ? C.green : C.orange, color: "#fff", borderRadius: 100, padding: "2px 9px", fontSize: 11, fontWeight: 600 } }, pl.status || "Open")),
+                        React.createElement("div", { style: { color: C.muted } },
+                            pl.punch_date,
+                            " \u2014 ",
+                            (pl.sections || []).length,
+                            " item(s), ",
+                            openCount,
+                            " open")),
+                    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" } },
+                        React.createElement("select", { value: pl.status || "Open", onClick: e => e.stopPropagation(), onChange: e => updatePunchListStatus(pl.id, e.target.value), style: { ...inp, width: "auto", marginBottom: 0 } },
+                            React.createElement("option", null, "Open"),
+                            React.createElement("option", null, "Completed")),
+                        React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: (e) => { e.stopPropagation(); setPrintPunchList(pl); setTimeout(() => window.print(), 100); } }, "Print"),
+                        React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: (e) => { e.stopPropagation(); emailPunchList(pl); } }, "Email"),
+                        React.createElement("button", { style: btnDangerSm, onClick: (e) => { e.stopPropagation(); deletePunchList(pl); } }, "Delete"))));
+            })),
+            !loadingData && tab === "Punch List" && viewPunchList && (() => {
+                const pl = punchLists.find(x => x.id === viewPunchList);
+                if (!pl)
+                    return null;
+                const items = pl.sections || [];
+                const openCount = items.filter(s => !s.resolved).length;
+                return (React.createElement("div", null,
+                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 } },
+                        React.createElement("button", { style: btnS, onClick: () => { setViewPunchList(null); setForm({}); } }, "\u2190 Back to Punch List"),
+                        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" } },
+                            React.createElement("select", { value: pl.status || "Open", onChange: e => updatePunchListStatus(pl.id, e.target.value), style: { ...inp, width: "auto", marginBottom: 0 } },
+                                React.createElement("option", null, "Open"),
+                                React.createElement("option", null, "Completed")),
+                            React.createElement("button", { style: { ...btnS, padding: "9px 14px" }, onClick: () => { setPrintPunchList(pl); setTimeout(() => window.print(), 100); } }, "Print"),
+                            React.createElement("button", { style: { ...btnS, padding: "9px 14px" }, onClick: () => emailPunchList(pl) }, "Email"),
+                            React.createElement("button", { style: btnDangerSm, onClick: () => deletePunchList(pl) }, "Delete Entire Punch List"))),
+                    React.createElement("h2", { style: { color: C.navy } },
+                        pl.title,
+                        " \u2014 ",
+                        propName(pl.property_id)),
+                    React.createElement("div", { style: { color: C.muted, marginBottom: 16 } }, pl.punch_date, " \u2014 ", openCount, " item(s) still open"),
+                    items.map((sec, i) => (React.createElement("div", { key: i, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + (sec.resolved ? C.green : C.border), marginBottom: 10, opacity: sec.resolved ? 0.7 : 1 } },
+                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
+                            React.createElement("div", { style: { fontWeight: 700, textDecoration: sec.resolved ? "line-through" : "none" } }, sec.name),
+                            React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+                                React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12, background: sec.resolved ? C.muted : C.green, color: "#fff", borderColor: sec.resolved ? C.muted : C.green }, onClick: () => togglePunchItemResolved(pl, i) }, sec.resolved ? "Reopen" : "Mark Fixed"),
+                                React.createElement("button", { style: { ...btnS, padding: "5px 10px", fontSize: 12 }, onClick: () => openEditPunchItem(pl, i) }, "Edit"),
+                                React.createElement("button", { style: btnDangerSm, onClick: () => deletePunchListItem(pl, i) }, "Delete"))),
+                        sec.contractorId && React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 6 } }, contractorName(sec.contractorId)),
+                        sec.notes && React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 6 } }, sec.notes),
+                        sec.photoUrl && React.createElement("img", { src: sec.photoUrl, style: { maxWidth: 200, borderRadius: 6 } })))),
+                    React.createElement("div", { style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px dashed " + C.border, marginTop: 16 } },
+                        React.createElement("h4", { style: { marginBottom: 10, color: C.navy } }, "Add Item"),
+                        React.createElement("input", { style: inp, placeholder: "Item (e.g. Touch up paint - hallway)", value: form.punchItemName || "", onChange: e => setF("punchItemName", e.target.value) }),
+                        React.createElement("select", { style: inp, value: form.punchItemContractor || "", onChange: e => setF("punchItemContractor", e.target.value) },
+                            React.createElement("option", { value: "" }, "Assign Contractor (optional)"),
+                            contractors.map(c => React.createElement("option", { key: c.id, value: c.id },
+                                c.name,
+                                " \u2014 ",
+                                c.trade))),
+                        React.createElement("input", { style: inp, placeholder: "Notes", value: form.punchItemNotes || "", onChange: e => setF("punchItemNotes", e.target.value) }),
+                        React.createElement(PhotoPicker, { idPrefix: "punchitem-" + pl.id, label: "Photo", file: form.punchItemPhoto, resetKey: resetKey, onSelect: e => handlePhotoSelect(e, "punchItemPhoto") }),
+                        React.createElement("button", { style: { ...btnP, opacity: submitting ? 0.6 : 1 }, disabled: submitting, onClick: () => addPunchListItem(pl.id) }, submitting ? "Saving\u2026" : "Add Item"))));
+            })(),
         printChangeOrder && (() => {
             const co = printChangeOrder;
             const isClient = co._audience === "client";
@@ -3516,6 +3751,30 @@ function App() {
                 (printInspection.sections || []).map((sec, i) => (React.createElement("div", { key: i, style: { marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid #ddd" } },
                     React.createElement("p", null,
                         React.createElement("strong", null, sec.name),
+                        sec.contractorId ? ` — ${contractorName(sec.contractorId)}` : ""),
+                    sec.notes && React.createElement("p", null,
+                        "Notes: ",
+                        sec.notes),
+                    sec.photoUrl && React.createElement("img", { src: sec.photoUrl, style: { maxWidth: 250, marginTop: 6 } }))))));
+        })(),
+        printPunchList && (() => {
+            const prop = properties.find(p => p.id === printPunchList.property_id);
+            const fullAddress = prop ? prop.address : propName(printPunchList.property_id);
+            return (React.createElement("div", { className: "print-view", style: { position: "fixed", inset: 0, background: "#fff", zIndex: 200, padding: 30, overflowY: "auto" } },
+                React.createElement("button", { className: "no-print", style: { ...btnS, marginBottom: 16 }, onClick: () => setPrintPunchList(null) }, "Close"),
+                React.createElement("div", { style: { textAlign: "center", borderBottom: "2px solid " + C.navy, paddingBottom: 16, marginBottom: 20 } },
+                    React.createElement("h1", { style: { fontSize: 20, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 } },
+                        printPunchList.title,
+                        " Punch List"),
+                    React.createElement("div", { style: { fontSize: 15, color: C.muted } }, fullAddress)),
+                React.createElement("p", { style: { marginBottom: 16, color: C.muted } },
+                    "Date: ",
+                    printPunchList.punch_date),
+                (printPunchList.sections || []).length === 0 && React.createElement("p", null, "No items recorded."),
+                (printPunchList.sections || []).map((sec, i) => (React.createElement("div", { key: i, style: { marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid #ddd" } },
+                    React.createElement("p", null,
+                        React.createElement("strong", null, sec.name),
+                        sec.resolved ? " \u2014 RESOLVED" : " \u2014 OPEN",
                         sec.contractorId ? ` — ${contractorName(sec.contractorId)}` : ""),
                     sec.notes && React.createElement("p", null,
                         "Notes: ",
@@ -4009,6 +4268,28 @@ function App() {
             React.createElement("input", { style: inp, placeholder: "Notes", value: form.sectionNotes || "", onChange: e => setF("sectionNotes", e.target.value) }),
             React.createElement("div", { style: { display: "flex", gap: 10 } },
                 React.createElement("button", { style: btnP, onClick: updateInspectionSection }, "Save Changes"),
+                React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
+        modal === "punchList" && (React.createElement(Modal, { title: "New Punch List", onClose: closeModal },
+            React.createElement("select", { style: inp, value: form.propertyId || "", onChange: e => setF("propertyId", e.target.value) },
+                React.createElement("option", { value: "" }, "Select job site\u2026"),
+                properties.map(p => React.createElement("option", { key: p.id, value: p.id }, p.address))),
+            React.createElement("input", { style: inp, placeholder: "Title (e.g. Final Walkthrough, Pre-Punch)", value: form.punchListTitle || "", onChange: e => setF("punchListTitle", e.target.value) }),
+            React.createElement("label", { style: { fontSize: 12, color: C.muted, display: "block", marginBottom: 4 } }, "Date"),
+            React.createElement("input", { style: inp, type: "date", value: form.punchListDate || "", onChange: e => setF("punchListDate", e.target.value) }),
+            React.createElement("div", { style: { display: "flex", gap: 10 } },
+                React.createElement("button", { style: { ...btnP, opacity: submitting ? 0.6 : 1 }, disabled: submitting, onClick: addPunchList }, submitting ? "Saving\u2026" : "Create"),
+                React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
+        modal === "editPunchItem" && (React.createElement(Modal, { title: "Edit Item", onClose: closeModal },
+            React.createElement("input", { style: inp, placeholder: "Item name", value: form.punchItemName || "", onChange: e => setF("punchItemName", e.target.value) }),
+            React.createElement("select", { style: inp, value: form.punchItemContractor || "", onChange: e => setF("punchItemContractor", e.target.value) },
+                React.createElement("option", { value: "" }, "Assign Contractor (optional)"),
+                contractors.map(c => React.createElement("option", { key: c.id, value: c.id },
+                    c.name,
+                    " \u2014 ",
+                    c.trade))),
+            React.createElement("input", { style: inp, placeholder: "Notes", value: form.punchItemNotes || "", onChange: e => setF("punchItemNotes", e.target.value) }),
+            React.createElement("div", { style: { display: "flex", gap: 10 } },
+                React.createElement("button", { style: btnP, onClick: updatePunchListItem }, "Save Changes"),
                 React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
         modal === "changeOrder" && (React.createElement(Modal, { title: "New Change Order", onClose: closeModal },
             React.createElement("select", { style: inp, value: form.coPropertyId || "", onChange: e => setF("coPropertyId", e.target.value) },
