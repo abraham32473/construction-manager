@@ -907,6 +907,7 @@ function App() {
     const [inspections, setInspections] = useState([]);
     const [punchLists, setPunchLists] = useState([]);
     const [scheduleTasks, setScheduleTasks] = useState([]);
+    const [expandedSchedule, setExpandedSchedule] = useState(null);
     const [notices, setNotices] = useState([]);
     const [contracts, setContracts] = useState([]);
     const [blueprints, setBlueprints] = useState([]);
@@ -2005,6 +2006,66 @@ function App() {
         showErr(error);
         if (!error)
             setScheduleTasks(ts => ts.filter(x => x.id !== t.id));
+    };
+    const renderScheduleChart = (p, big) => {
+        const tasks = scheduleTasks.filter(t => t.property_id === p.id).slice().sort((a, b) => a.planned_start.localeCompare(b.planned_start));
+        if (tasks.length === 0) {
+            return React.createElement("div", { key: p.id, style: { marginBottom: 24 } },
+                React.createElement("h3", { style: { color: C.navy, fontSize: big ? 20 : 16, marginBottom: 8 } }, p.address),
+                React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No trades scheduled yet."));
+        }
+        const distinctTrades = [];
+        tasks.forEach(t => { if (!distinctTrades.includes(t.trade)) distinctTrades.push(t.trade); });
+        const colorFor = (trade) => tradeColor(trade, distinctTrades.indexOf(trade));
+        const allDates = tasks.flatMap(t => [t.planned_start, t.planned_end, t.actual_start, t.actual_end].filter(Boolean));
+        const minDate = new Date(Math.min(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
+        const maxDate = new Date(Math.max(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
+        const totalDays = Math.max(1, (maxDate - minDate) / 86400000);
+        const fracFor = (dateStr) => (new Date(dateStr + "T00:00:00") - minDate) / 86400000 / totalDays;
+        const todayFrac = fracFor(new Date().toISOString().slice(0, 10));
+        const showTodayLine = todayFrac >= 0 && todayFrac <= 1;
+        const tickFracs = [0, 0.25, 0.5, 0.75, 1];
+        const tickDates = tickFracs.map(f => new Date(minDate.getTime() + f * totalDays * 86400000));
+        const ROW_H = big ? 48 : 40;
+        const HEADER_H = big ? 30 : 26;
+        const VBW = big ? 1200 : 600;
+        const LABEL_W = big ? 160 : 118;
+        const totalH = HEADER_H + tasks.length * ROW_H;
+        const xFor = (frac) => frac * VBW;
+        return React.createElement("div", { key: p.id, style: { marginBottom: 32 } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+                React.createElement("h3", { style: { color: C.navy, fontSize: big ? 20 : 16 } }, p.address),
+                !big && React.createElement("button", { style: { ...btnS, padding: "5px 12px", fontSize: 12 }, onClick: () => setExpandedSchedule(p.id) }, "Expand")),
+            React.createElement("div", { style: { color: C.muted, fontSize: big ? 14 : 12, marginBottom: 12 } }, "Lighter bar = planned \u2014 solid bar = actual"),
+            React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 16, display: "flex" } },
+                React.createElement("div", { style: { width: LABEL_W, flexShrink: 0 } },
+                    React.createElement("div", { style: { height: HEADER_H } }),
+                    tasks.map(t => React.createElement("div", { key: t.id, style: { height: ROW_H, display: "flex", alignItems: "center", gap: 6 } },
+                        React.createElement("button", { style: { ...btnDangerSm, padding: "1px 6px", fontSize: big ? 13 : 11, flexShrink: 0 }, onClick: () => deleteScheduleTask(t) }, "\u00d7"),
+                        React.createElement("div", { style: { fontSize: big ? 14 : 12, fontWeight: 700, color: C.navy, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }, onClick: () => openEditScheduleTask(t) }, t.trade)))),
+                React.createElement("svg", { viewBox: `0 0 ${VBW} ${totalH}`, preserveAspectRatio: "none", style: { width: "100%", height: totalH, display: "block" } },
+                    tickFracs.map((f, i) => React.createElement("line", { key: "gl" + i, x1: xFor(f), x2: xFor(f), y1: 0, y2: totalH, stroke: C.border, strokeWidth: 1 })),
+                    tickFracs.map((f, i) => React.createElement("text", { key: "tx" + i, x: xFor(f), y: 15, fontSize: big ? 13 : 10, fill: C.muted, fontWeight: 600, textAnchor: i === 0 ? "start" : (i === tickFracs.length - 1 ? "end" : "middle") }, tickDates[i].toLocaleDateString(undefined, { month: "numeric", day: "numeric" }))),
+                    showTodayLine && React.createElement("line", { x1: xFor(todayFrac), x2: xFor(todayFrac), y1: 0, y2: totalH, stroke: C.navy, strokeWidth: 2 }),
+                    tasks.map((t, i) => {
+                        const color = colorFor(t.trade);
+                        const rowTop = HEADER_H + i * ROW_H;
+                        const plannedLeft = xFor(fracFor(t.planned_start));
+                        const plannedWidth = Math.max(6, xFor(fracFor(t.planned_end)) - plannedLeft);
+                        const hasActual = t.actual_start && t.actual_end;
+                        const actualLeft = hasActual ? xFor(fracFor(t.actual_start)) : null;
+                        const actualWidth = hasActual ? Math.max(6, xFor(fracFor(t.actual_end)) - actualLeft) : null;
+                        const barH = hasActual ? (big ? 12 : 9) : (big ? 16 : 12);
+                        const plannedY = hasActual ? rowTop + (ROW_H / 2) - barH - 1 : rowTop + (ROW_H - barH) / 2;
+                        const actualY = rowTop + (ROW_H / 2) + 1;
+                        return React.createElement("g", { key: t.id, onClick: () => openEditScheduleTask(t), style: { cursor: "pointer" } },
+                            React.createElement("rect", { x: plannedLeft, y: plannedY, width: plannedWidth, height: barH, fill: color, opacity: 0.4, rx: 3 }),
+                            hasActual && React.createElement("rect", { x: actualLeft, y: actualY, width: actualWidth, height: barH, fill: color, rx: 3 }));
+                    }))),
+            React.createElement("div", { style: { marginTop: 12 } },
+                distinctTrades.map(trade => React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", gap: 6, fontSize: big ? 14 : 12, color: C.muted, marginBottom: 4 } },
+                    React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade), flexShrink: 0 } }),
+                    trade))));
     };
     const addNotice = async () => {
         if (!form.propertyId || !form.noticeFile)
@@ -3615,63 +3676,17 @@ function App() {
                         React.createElement("button", { style: { ...btnP, opacity: submitting ? 0.6 : 1 }, disabled: submitting, onClick: () => addPunchListItem(pl.id) }, submitting ? "Saving\u2026" : "Add Item"))));
             })(),
             !loadingData && tab === "Schedule" && (properties.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "Add a job site first, then you can schedule trades for it.") :
-                properties.map(p => {
-                    const tasks = scheduleTasks.filter(t => t.property_id === p.id).slice().sort((a, b) => a.planned_start.localeCompare(b.planned_start));
-                    if (tasks.length === 0) {
-                        return React.createElement("div", { key: p.id, style: { marginBottom: 24 } },
-                            React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 8 } }, p.address),
-                            React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No trades scheduled yet."));
-                    }
-                    const distinctTrades = [];
-                    tasks.forEach(t => { if (!distinctTrades.includes(t.trade)) distinctTrades.push(t.trade); });
-                    const colorFor = (trade) => tradeColor(trade, distinctTrades.indexOf(trade));
-                    const allDates = tasks.flatMap(t => [t.planned_start, t.planned_end, t.actual_start, t.actual_end].filter(Boolean));
-                    const minDate = new Date(Math.min(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
-                    const maxDate = new Date(Math.max(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
-                    const totalDays = Math.max(1, (maxDate - minDate) / 86400000);
-                    const fracFor = (dateStr) => (new Date(dateStr + "T00:00:00") - minDate) / 86400000 / totalDays;
-                    const todayFrac = fracFor(new Date().toISOString().slice(0, 10));
-                    const showTodayLine = todayFrac >= 0 && todayFrac <= 1;
-                    const tickFracs = [0, 0.25, 0.5, 0.75, 1];
-                    const tickDates = tickFracs.map(f => new Date(minDate.getTime() + f * totalDays * 86400000));
-                    const ROW_H = 40;
-                    const HEADER_H = 26;
-                    const VBW = 600;
-                    const totalH = HEADER_H + tasks.length * ROW_H;
-                    const xFor = (frac) => frac * VBW;
-                    return React.createElement("div", { key: p.id, style: { marginBottom: 32 } },
-                        React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 4 } }, p.address),
-                        React.createElement("div", { style: { color: C.muted, fontSize: 12, marginBottom: 12 } }, "Lighter bar = planned \u2014 solid bar = actual"),
-                        React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 16, display: "flex" } },
-                            React.createElement("div", { style: { width: 118, flexShrink: 0 } },
-                                React.createElement("div", { style: { height: HEADER_H } }),
-                                tasks.map(t => React.createElement("div", { key: t.id, style: { height: ROW_H, display: "flex", alignItems: "center", gap: 6 } },
-                                    React.createElement("button", { style: { ...btnDangerSm, padding: "1px 6px", fontSize: 11, flexShrink: 0 }, onClick: () => deleteScheduleTask(t) }, "\u00d7"),
-                                    React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.navy, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }, onClick: () => openEditScheduleTask(t) }, t.trade)))),
-                            React.createElement("svg", { viewBox: `0 0 ${VBW} ${totalH}`, preserveAspectRatio: "none", style: { width: "100%", height: totalH, display: "block" } },
-                                tickFracs.map((f, i) => React.createElement("line", { key: "gl" + i, x1: xFor(f), x2: xFor(f), y1: 0, y2: totalH, stroke: C.border, strokeWidth: 1 })),
-                                tickFracs.map((f, i) => React.createElement("text", { key: "tx" + i, x: xFor(f), y: 15, fontSize: 10, fill: C.muted, fontWeight: 600, textAnchor: i === 0 ? "start" : (i === tickFracs.length - 1 ? "end" : "middle") }, tickDates[i].toLocaleDateString(undefined, { month: "numeric", day: "numeric" }))),
-                                showTodayLine && React.createElement("line", { x1: xFor(todayFrac), x2: xFor(todayFrac), y1: 0, y2: totalH, stroke: C.navy, strokeWidth: 2 }),
-                                tasks.map((t, i) => {
-                                    const color = colorFor(t.trade);
-                                    const rowTop = HEADER_H + i * ROW_H;
-                                    const plannedLeft = xFor(fracFor(t.planned_start));
-                                    const plannedWidth = Math.max(6, xFor(fracFor(t.planned_end)) - plannedLeft);
-                                    const hasActual = t.actual_start && t.actual_end;
-                                    const actualLeft = hasActual ? xFor(fracFor(t.actual_start)) : null;
-                                    const actualWidth = hasActual ? Math.max(6, xFor(fracFor(t.actual_end)) - actualLeft) : null;
-                                    const barH = hasActual ? 9 : 12;
-                                    const plannedY = hasActual ? rowTop + (ROW_H / 2) - barH - 1 : rowTop + (ROW_H - barH) / 2;
-                                    const actualY = rowTop + (ROW_H / 2) + 1;
-                                    return React.createElement("g", { key: t.id, onClick: () => openEditScheduleTask(t), style: { cursor: "pointer" } },
-                                        React.createElement("rect", { x: plannedLeft, y: plannedY, width: plannedWidth, height: barH, fill: color, opacity: 0.4, rx: 3 }),
-                                        hasActual && React.createElement("rect", { x: actualLeft, y: actualY, width: actualWidth, height: barH, fill: color, rx: 3 }));
-                                }))),
-                        React.createElement("div", { style: { marginTop: 12 } },
-                            distinctTrades.map(trade => React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, marginBottom: 4 } },
-                                React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade), flexShrink: 0 } }),
-                                trade))));
-                })),
+                properties.map(p => renderScheduleChart(p, false))),
+        expandedSchedule && (() => {
+            const p = properties.find(x => x.id === expandedSchedule);
+            if (!p)
+                return null;
+            return React.createElement("div", { style: { position: "fixed", inset: 0, background: "#fff", zIndex: 300, padding: 20, overflowY: "auto" } },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
+                    React.createElement("h2", { style: { color: C.navy } }, "Schedule"),
+                    React.createElement("button", { style: btnP, onClick: () => setExpandedSchedule(null) }, "Close")),
+                renderScheduleChart(p, true));
+        })(),
         printChangeOrder && (() => {
             const co = printChangeOrder;
             const isClient = co._audience === "client";
