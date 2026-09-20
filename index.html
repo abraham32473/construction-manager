@@ -3629,36 +3629,37 @@ function App() {
                     const minDate = new Date(Math.min(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
                     const maxDate = new Date(Math.max(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
                     const totalDays = Math.max(1, (maxDate - minDate) / 86400000);
-                    const pctFor = (dateStr) => ((new Date(dateStr + "T00:00:00") - minDate) / 86400000 / totalDays) * 100;
-                    const todayPct = pctFor(new Date().toISOString().slice(0, 10));
-                    const showTodayLine = todayPct >= 0 && todayPct <= 100;
+                    const fracFor = (dateStr) => (new Date(dateStr + "T00:00:00") - minDate) / 86400000 / totalDays;
+                    const LW = 108;
+                    const leftFor = (frac) => `calc(${LW}px + (100% - ${LW}px) * ${frac})`;
+                    const todayFrac = fracFor(new Date().toISOString().slice(0, 10));
+                    const showTodayLine = todayFrac >= 0 && todayFrac <= 1;
+                    const tickFracs = [0, 0.25, 0.5, 0.75, 1];
+                    const tickDates = tickFracs.map(f => new Date(minDate.getTime() + f * totalDays * 86400000));
                     return React.createElement("div", { key: p.id, style: { marginBottom: 32 } },
                         React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 4 } }, p.address),
-                        React.createElement("div", { style: { color: C.muted, fontSize: 12, marginBottom: 12 } },
-                            minDate.toLocaleDateString(),
-                            " \u2192 ",
-                            maxDate.toLocaleDateString(),
-                            "   (lighter bar = planned, solid bar = actual)"),
-                        React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: "16px 16px 8px", position: "relative" } },
-                            showTodayLine && React.createElement("div", { style: { position: "absolute", top: 8, bottom: 8, left: `calc(${todayPct}% + 16px)`, width: 2, background: C.navy, zIndex: 2 } }),
-                            showTodayLine && React.createElement("div", { style: { position: "absolute", top: -2, left: `calc(${todayPct}% + 16px)`, transform: "translateX(-50%)", fontSize: 10, color: C.navy, fontWeight: 700, background: "#fff", padding: "0 4px" } }, "Today"),
-                            tasks.map(t => {
-                                const color = colorFor(t.trade);
-                                const plannedLeft = pctFor(t.planned_start);
-                                const plannedWidth = Math.max(1.5, pctFor(t.planned_end) - plannedLeft);
-                                const hasActual = t.actual_start && t.actual_end;
-                                const actualLeft = hasActual ? pctFor(t.actual_start) : null;
-                                const actualWidth = hasActual ? Math.max(1.5, pctFor(t.actual_end) - actualLeft) : null;
-                                return React.createElement("div", { key: t.id, style: { marginBottom: 14, cursor: "pointer" }, onClick: () => openEditScheduleTask(t) },
-                                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
-                                        React.createElement("span", { style: { fontWeight: 700, color: C.navy } },
-                                            t.trade,
-                                            t.contractor_id ? " \u2014 " + contractorName(t.contractor_id) : ""),
-                                        React.createElement("button", { style: { ...btnDangerSm, padding: "1px 8px" }, onClick: (e) => { e.stopPropagation(); deleteScheduleTask(t); } }, "\u00d7")),
-                                    React.createElement("div", { style: { position: "relative", height: hasActual ? 20 : 12, background: C.bg, borderRadius: 4 } },
-                                        React.createElement("div", { style: { position: "absolute", left: plannedLeft + "%", width: plannedWidth + "%", top: 0, height: hasActual ? 9 : 12, background: color, opacity: 0.4, borderRadius: 3 } }),
-                                        hasActual && React.createElement("div", { style: { position: "absolute", left: actualLeft + "%", width: actualWidth + "%", bottom: 0, height: 9, background: color, borderRadius: 3 } })));
-                            })),
+                        React.createElement("div", { style: { color: C.muted, fontSize: 12, marginBottom: 12 } }, "Lighter bar = planned \u2014 solid bar = actual"),
+                        React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: "12px 16px 16px", position: "relative", overflow: "hidden" } },
+                            React.createElement("div", { style: { position: "relative", height: 20, marginBottom: 8 } },
+                                tickFracs.map((f, i) => React.createElement("div", { key: i, style: { position: "absolute", left: leftFor(f), transform: i === tickFracs.length - 1 ? "translateX(-100%)" : (i === 0 ? "none" : "translateX(-50%)"), fontSize: 10, color: C.muted, fontWeight: 600, whiteSpace: "nowrap" } }, tickDates[i].toLocaleDateString(undefined, { month: "numeric", day: "numeric" })))),
+                            React.createElement("div", { style: { position: "relative" } },
+                                tickFracs.map((f, i) => React.createElement("div", { key: i, style: { position: "absolute", top: 0, bottom: 0, left: leftFor(f), width: 1, background: C.border, zIndex: 1 } })),
+                                showTodayLine && React.createElement("div", { style: { position: "absolute", top: 0, bottom: 0, left: leftFor(todayFrac), width: 2, background: C.navy, zIndex: 3 } }),
+                                showTodayLine && React.createElement("div", { style: { position: "absolute", top: -2, left: leftFor(todayFrac), transform: "translateX(-50%)", fontSize: 9, color: "#fff", fontWeight: 700, background: C.navy, padding: "1px 5px", borderRadius: 3, zIndex: 3 } }, "Today"),
+                                tasks.map(t => {
+                                    const color = colorFor(t.trade);
+                                    const plannedLeftFrac = fracFor(t.planned_start);
+                                    const plannedWidthFrac = Math.max(0.015, fracFor(t.planned_end) - plannedLeftFrac);
+                                    const hasActual = t.actual_start && t.actual_end;
+                                    const actualLeftFrac = hasActual ? fracFor(t.actual_start) : null;
+                                    const actualWidthFrac = hasActual ? Math.max(0.015, fracFor(t.actual_end) - actualLeftFrac) : null;
+                                    return React.createElement("div", { key: t.id, style: { display: "flex", alignItems: "center", minHeight: 34, cursor: "pointer", position: "relative", zIndex: 2 }, onClick: () => openEditScheduleTask(t) },
+                                        React.createElement("div", { style: { width: LW, paddingRight: 8, fontSize: 12, fontWeight: 700, color: C.navy, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, t.trade),
+                                        React.createElement("div", { style: { flex: 1, position: "relative", height: hasActual ? 20 : 12 } },
+                                            React.createElement("div", { style: { position: "absolute", left: (plannedLeftFrac * 100) + "%", width: (plannedWidthFrac * 100) + "%", top: 0, height: hasActual ? 9 : 12, background: color, opacity: 0.4, borderRadius: 3 } }),
+                                            hasActual && React.createElement("div", { style: { position: "absolute", left: (actualLeftFrac * 100) + "%", width: (actualWidthFrac * 100) + "%", bottom: 0, height: 9, background: color, borderRadius: 3 } })),
+                                        React.createElement("button", { style: { ...btnDangerSm, padding: "1px 8px", marginLeft: 8, flexShrink: 0 }, onClick: (e) => { e.stopPropagation(); deleteScheduleTask(t); } }, "\u00d7"));
+                                }))),
                         React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12, marginTop: 10 } },
                             distinctTrades.map(trade => React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: C.muted } },
                                 React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade) } }),
