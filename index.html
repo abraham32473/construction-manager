@@ -3637,37 +3637,32 @@ function App() {
                     const BTN_COL = 26;
                     const LABEL_COL = 82;
                     const totalRows = tasks.length + 1;
-                    const overlay = React.createElement("div", { key: "overlay", style: { gridColumn: 3, gridRow: `1 / span ${totalRows}`, position: "relative", pointerEvents: "none" } },
-                        tickFracs.map((f, i) => React.createElement("div", { key: i, style: { position: "absolute", top: 0, bottom: 0, left: (f * 100) + "%", width: 1, background: C.border } })),
-                        showTodayLine && React.createElement("div", { style: { position: "absolute", top: 0, bottom: 0, left: (todayFrac * 100) + "%", width: 2, background: C.navy } }));
-                    const headerRow = [
-                        React.createElement("div", { key: "h-btn" }),
-                        React.createElement("div", { key: "h-label" }),
-                        React.createElement("div", { key: "h-ticks", style: { position: "relative", height: 20 } },
-                            tickFracs.map((f, i) => React.createElement("div", { key: i, style: { position: "absolute", left: (f * 100) + "%", transform: i === 0 ? "none" : (i === tickFracs.length - 1 ? "translateX(-100%)" : "translateX(-50%)"), fontSize: 10, color: C.muted, fontWeight: 600, whiteSpace: "nowrap" } }, tickDates[i].toLocaleDateString(undefined, { month: "numeric", day: "numeric" })))),
-                    ];
-                    const taskRows = tasks.map(t => {
+                    const cells = [];
+                    cells.push(React.createElement("div", { key: "h-btn", style: { gridRow: 1, gridColumn: 1 } }));
+                    cells.push(React.createElement("div", { key: "h-label", style: { gridRow: 1, gridColumn: 2 } }));
+                    cells.push(React.createElement("div", { key: "h-ticks", style: { gridRow: 1, gridColumn: 3, position: "relative", height: 20 } },
+                        tickFracs.map((f, i) => React.createElement("div", { key: i, style: { position: "absolute", left: (f * 100) + "%", transform: i === 0 ? "none" : (i === tickFracs.length - 1 ? "translateX(-100%)" : "translateX(-50%)"), fontSize: 10, color: C.muted, fontWeight: 600, whiteSpace: "nowrap" } }, tickDates[i].toLocaleDateString(undefined, { month: "numeric", day: "numeric" })))));
+                    tasks.forEach((t, rowIdx) => {
+                        const rowNum = rowIdx + 2;
                         const color = colorFor(t.trade);
                         const plannedLeftFrac = fracFor(t.planned_start);
                         const plannedWidthFrac = Math.max(0.015, fracFor(t.planned_end) - plannedLeftFrac);
                         const hasActual = t.actual_start && t.actual_end;
                         const actualLeftFrac = hasActual ? fracFor(t.actual_start) : null;
                         const actualWidthFrac = hasActual ? Math.max(0.015, fracFor(t.actual_end) - actualLeftFrac) : null;
-                        return [
-                            React.createElement("button", { key: t.id + "-btn", style: { ...btnDangerSm, padding: "1px 6px", fontSize: 11 }, onClick: (e) => { e.stopPropagation(); deleteScheduleTask(t); } }, "\u00d7"),
-                            React.createElement("div", { key: t.id + "-label", style: { fontSize: 12, fontWeight: 700, color: C.navy, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }, onClick: () => openEditScheduleTask(t) }, t.trade),
-                            React.createElement("div", { key: t.id + "-bar", style: { position: "relative", height: hasActual ? 20 : 12, cursor: "pointer" }, onClick: () => openEditScheduleTask(t) },
-                                React.createElement("div", { style: { position: "absolute", left: (plannedLeftFrac * 100) + "%", width: (plannedWidthFrac * 100) + "%", top: 0, height: hasActual ? 9 : 12, background: color, opacity: 0.4, borderRadius: 3 } }),
-                                hasActual && React.createElement("div", { style: { position: "absolute", left: (actualLeftFrac * 100) + "%", width: (actualWidthFrac * 100) + "%", bottom: 0, height: 9, background: color, borderRadius: 3 } })),
-                        ];
+                        cells.push(React.createElement("button", { key: t.id + "-btn", style: { ...btnDangerSm, gridRow: rowNum, gridColumn: 1, padding: "1px 6px", fontSize: 11, justifySelf: "start" }, onClick: (e) => { e.stopPropagation(); deleteScheduleTask(t); } }, "\u00d7"));
+                        cells.push(React.createElement("div", { key: t.id + "-label", style: { gridRow: rowNum, gridColumn: 2, fontSize: 12, fontWeight: 700, color: C.navy, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }, onClick: () => openEditScheduleTask(t) }, t.trade));
+                        cells.push(React.createElement("div", { key: t.id + "-bar", style: { gridRow: rowNum, gridColumn: 3, position: "relative", height: hasActual ? 20 : 12, cursor: "pointer" }, onClick: () => openEditScheduleTask(t) },
+                            React.createElement("div", { style: { position: "absolute", left: (plannedLeftFrac * 100) + "%", width: (plannedWidthFrac * 100) + "%", top: 0, height: hasActual ? 9 : 12, background: color, opacity: 0.4, borderRadius: 3 } }),
+                            hasActual && React.createElement("div", { style: { position: "absolute", left: (actualLeftFrac * 100) + "%", width: (actualWidthFrac * 100) + "%", bottom: 0, height: 9, background: color, borderRadius: 3 } })));
                     });
+                    cells.push(React.createElement("div", { key: "overlay", style: { gridRow: `1 / span ${totalRows}`, gridColumn: 3, position: "relative", pointerEvents: "none" } },
+                        tickFracs.map((f, i) => React.createElement("div", { key: i, style: { position: "absolute", top: 0, bottom: 0, left: (f * 100) + "%", width: 1, background: C.border } })),
+                        showTodayLine && React.createElement("div", { style: { position: "absolute", top: 0, bottom: 0, left: (todayFrac * 100) + "%", width: 2, background: C.navy } })));
                     return React.createElement("div", { key: p.id, style: { marginBottom: 32 } },
                         React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 4 } }, p.address),
                         React.createElement("div", { style: { color: C.muted, fontSize: 12, marginBottom: 12 } }, "Lighter bar = planned \u2014 solid bar = actual"),
-                        React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 16, display: "grid", gridTemplateColumns: `${BTN_COL}px ${LABEL_COL}px 1fr`, columnGap: 8, rowGap: 10, alignItems: "center" } },
-                            headerRow,
-                            taskRows,
-                            overlay),
+                        React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 16, display: "grid", gridTemplateColumns: `${BTN_COL}px ${LABEL_COL}px 1fr`, gridTemplateRows: `repeat(${totalRows}, auto)`, columnGap: 8, rowGap: 10, alignItems: "center" } }, cells),
                         React.createElement("div", { style: { marginTop: 12 } },
                             distinctTrades.map(trade => React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, marginBottom: 4 } },
                                 React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade), flexShrink: 0 } }),
