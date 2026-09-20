@@ -1130,7 +1130,7 @@ function App() {
     useEffect(() => {
         if (session)
             loadAllData();
-    }, [session?.user?.id]);
+    }, [session]);
     const loadAllData = async () => {
         setLoadingData(true);
         const minDelay = new Promise(resolve => setTimeout(resolve, 500));
