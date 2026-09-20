@@ -44,6 +44,21 @@ body { font-family: Arial, sans-serif; background: #f7f8fc; }
 "use strict";
 const { useState, useEffect } = React;
 const C = { navy: "#1a2744", accent: "#5dade2", red: "#dc3545", green: "#2e7d32", blue: "#1565c0", orange: "#d84315", bg: "#f7f8fc", white: "#fff", border: "#e2e6ef", text: "#1a2744", muted: "#6b7a99" };
+const TRADE_COLORS = {
+    "Footing": "#8B6F47",
+    "Framing": "#E67E22",
+    "Electrical": "#E63946",
+    "Plumbing": "#2E86DE",
+    "Drywall": "#95A5A6",
+    "Roofing": "#3E4A52",
+    "HVAC": "#27AE60",
+    "Stucco": "#C9A227",
+    "Siding": "#C9A227",
+    "Exterior Wrap": "#C9A227",
+    "Paint": "#8E44AD",
+};
+const TRADE_COLOR_FALLBACKS = ["#16A085", "#D35400", "#2C3E50", "#C0392B", "#7F8C8D", "#F39C12", "#2980B9", "#8E44AD", "#27AE60", "#E67E22"];
+const tradeColor = (trade, index) => TRADE_COLORS[trade] || TRADE_COLOR_FALLBACKS[(index || 0) % TRADE_COLOR_FALLBACKS.length];
 const SUPABASE_URL = "https://gistxdxxaehbekgivcks.supabase.co";
 const SUPABASE_KEY = "sb_publishable_S4PvtoVtTRQSxrMhpb5U5Q_4oUpqIcK";
 const LOCK_DELAY_MS = 180000;
@@ -793,6 +808,11 @@ function HelpTab() {
             "As items get fixed, tap Mark Fixed to check them off — the list shows how many are still open at a glance.",
             "Mark the whole punch list Completed once everything's resolved and the client walkthrough is done."
         ]},
+        { key: "schedule", tag: "Timeline", color: C.navy, title: "Schedule", body: [
+            "Tap + Add Trade to Schedule, pick the job site, name the trade, and set a planned start and end date. Common trades (footing, framing, electrical, plumbing, drywall, roofing, HVAC, stucco, paint) always get the same color across every job.",
+            "The lighter bar is the planned window; once work actually starts, tap the trade and fill in Actual Start/End — a solid bar appears underneath so you can see at a glance whether you're on schedule, ahead, or behind.",
+            "The vertical line marks today's date, so you can see where the project stands against the plan at any moment."
+        ]},
         { key: "contractors", tag: "Contacts", color: C.navy, title: "Subcontractors", body: [
             "Keep your go-to contractors on file so you can assign them to repair jobs without hunting for a phone number."
         ]},
@@ -886,6 +906,7 @@ function App() {
     const [contractors, setContractors] = useState([]);
     const [inspections, setInspections] = useState([]);
     const [punchLists, setPunchLists] = useState([]);
+    const [scheduleTasks, setScheduleTasks] = useState([]);
     const [notices, setNotices] = useState([]);
     const [contracts, setContracts] = useState([]);
     const [blueprints, setBlueprints] = useState([]);
@@ -1134,7 +1155,7 @@ function App() {
     const loadAllData = async () => {
         setLoadingData(true);
         const minDelay = new Promise(resolve => setTimeout(resolve, 500));
-        const [p, r, rh, d, c, ins, nt, ct, pm, pt, fm, res, rl, pr, tn, rq, lc, lcp, ut, imp, gs, jc, mt, co, bp, cf, dl, cl, ccp, plst] = await Promise.all([
+        const [p, r, rh, d, c, ins, nt, ct, pm, pt, fm, res, rl, pr, tn, rq, lc, lcp, ut, imp, gs, jc, mt, co, bp, cf, dl, cl, ccp, plst, sch] = await Promise.all([
             sb.from("cm_properties").select("*").order("id"),
             sb.from("cm_repairs").select("*").order("id"),
             sb.from("rent_history").select("*").order("id"),
@@ -1165,6 +1186,7 @@ function App() {
             sb.from("cm_clients").select("*").order("full_name"),
             sb.from("cm_client_properties").select("*"),
             sb.from("cm_punch_lists").select("*").order("created_at", { ascending: false }),
+            sb.from("cm_schedule_tasks").select("*").order("planned_start"),
         ]);
         if (p.data)
             setProperties(p.data);
@@ -1226,6 +1248,8 @@ function App() {
             setClientProperties(ccp.data);
         if (plst.data)
             setPunchLists(plst.data);
+        if (sch.data)
+            setScheduleTasks(sch.data);
         if (lc.data && lcp.data)
             await ensureLawnCarePayments(lc.data, lcp.data);
         await minDelay;
@@ -1933,6 +1957,54 @@ function App() {
         }).join("\n");
         const body = encodeURIComponent(`Property: ${fullAddress}\nPunch List: ${pl.title}\nDate: ${pl.punch_date}\n\nItems:\n${itemLines || "None"}`);
         openMailto(`mailto:?subject=${subject}&body=${body}`);
+    };
+    const addScheduleTask = async () => {
+        if (!form.propertyId || !form.scheduleTrade || !form.schedulePlannedStart || !form.schedulePlannedEnd)
+            return;
+        const { data, error } = await withRetry(() => sb.from("cm_schedule_tasks").insert({
+            user_id: userId(),
+            property_id: Number(form.propertyId),
+            trade: form.scheduleTrade,
+            contractor_id: form.scheduleContractorId ? Number(form.scheduleContractorId) : null,
+            planned_start: form.schedulePlannedStart,
+            planned_end: form.schedulePlannedEnd,
+            notes: form.scheduleNotes || null,
+        }).select());
+        showErr(error);
+        if (data)
+            setScheduleTasks(s => [...s, ...data]);
+        closeModal();
+    };
+    const openEditScheduleTask = (t) => {
+        setForm({ scheduleTaskId: t.id, propertyId: String(t.property_id), scheduleTrade: t.trade, scheduleContractorId: t.contractor_id ? String(t.contractor_id) : "", schedulePlannedStart: t.planned_start, schedulePlannedEnd: t.planned_end, scheduleActualStart: t.actual_start || "", scheduleActualEnd: t.actual_end || "", scheduleNotes: t.notes || "" });
+        setModal("editScheduleTask");
+    };
+    const updateScheduleTask = async () => {
+        if (!form.scheduleTaskId || !form.scheduleTrade || !form.schedulePlannedStart || !form.schedulePlannedEnd)
+            return;
+        const updates = {
+            trade: form.scheduleTrade,
+            contractor_id: form.scheduleContractorId ? Number(form.scheduleContractorId) : null,
+            planned_start: form.schedulePlannedStart,
+            planned_end: form.schedulePlannedEnd,
+            actual_start: form.scheduleActualStart || null,
+            actual_end: form.scheduleActualEnd || null,
+            notes: form.scheduleNotes || null,
+        };
+        const { error } = await withRetry(() => sb.from("cm_schedule_tasks").update(updates).eq("id", form.scheduleTaskId));
+        showErr(error);
+        if (!error) {
+            setScheduleTasks(ts => ts.map(t => t.id === form.scheduleTaskId ? { ...t, ...updates } : t));
+            closeModal();
+        }
+    };
+    const deleteScheduleTask = async (t) => {
+        if (!window.confirm(`Remove ${t.trade} from the schedule?`))
+            return;
+        const { error } = await sb.from("cm_schedule_tasks").delete().eq("id", t.id);
+        showErr(error);
+        if (!error)
+            setScheduleTasks(ts => ts.filter(x => x.id !== t.id));
     };
     const addNotice = async () => {
         if (!form.propertyId || !form.noticeFile)
@@ -2815,7 +2887,7 @@ function App() {
     if (!session) {
         return React.createElement(AuthScreen, null);
     }
-    const TABS = ["Dashboard", "Help", "Job Sites", "Tasks", "Client Requests", "Inspections", "Punch List", "CM Forms", "Daily Logs", "Subcontractors", "Change Orders", "Contracts", "Blueprints", "Payments", "Budget", "Materials", "My Profile"];
+    const TABS = ["Dashboard", "Help", "Job Sites", "Tasks", "Client Requests", "Inspections", "Punch List", "Schedule", "CM Forms", "Daily Logs", "Subcontractors", "Change Orders", "Contracts", "Blueprints", "Payments", "Budget", "Materials", "My Profile"];
     return (React.createElement("div", { className: "app-root", style: { display: "flex", minHeight: "100vh" } },
         React.createElement("div", { className: "no-print", style: { width: 200, background: C.navy, padding: 20, color: "#fff", flexShrink: 0, display: "flex", flexDirection: "column" } },
             React.createElement("h2", { style: { fontSize: 18, marginBottom: 20 } }, "Construction Manager"),
@@ -2846,6 +2918,7 @@ function App() {
                 tab === "Materials" && React.createElement("button", { style: btnP, onClick: () => openModal("material") }, "+ Add Material"),
                 tab === "Inspections" && !viewInspection && React.createElement("button", { style: btnP, onClick: () => openModal("inspection") }, "+ New Inspection"),
                 tab === "Punch List" && !viewPunchList && React.createElement("button", { style: btnP, onClick: () => openModal("punchList") }, "+ New Punch List"),
+                tab === "Schedule" && React.createElement("button", { style: btnP, onClick: () => openModal("scheduleTask") }, "+ Add Trade to Schedule"),
                 tab === "Change Orders" && React.createElement("button", { style: btnP, onClick: () => openModal("changeOrder") }, "+ New Change Order"),
                 tab === "Client Requests" && React.createElement("button", { style: btnP, onClick: () => openModal("addClient") }, "+ Add Client"),
                 tab === "Contracts" && React.createElement("button", { style: btnP, onClick: () => openModal("contract") }, "+ Upload Contract"),
@@ -3541,6 +3614,56 @@ function App() {
                         React.createElement(PhotoPicker, { idPrefix: "punchitem-" + pl.id, label: "Photo", url: form.punchItemPhotoUrl, resetKey: resetKey, folder: "punchlists", userIdVal: userId(), onUploaded: url => setF("punchItemPhotoUrl", url) }),
                         React.createElement("button", { style: { ...btnP, opacity: submitting ? 0.6 : 1 }, disabled: submitting, onClick: () => addPunchListItem(pl.id) }, submitting ? "Saving\u2026" : "Add Item"))));
             })(),
+            !loadingData && tab === "Schedule" && (properties.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "Add a job site first, then you can schedule trades for it.") :
+                properties.map(p => {
+                    const tasks = scheduleTasks.filter(t => t.property_id === p.id).slice().sort((a, b) => a.planned_start.localeCompare(b.planned_start));
+                    if (tasks.length === 0) {
+                        return React.createElement("div", { key: p.id, style: { marginBottom: 24 } },
+                            React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 8 } }, p.address),
+                            React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No trades scheduled yet."));
+                    }
+                    const distinctTrades = [];
+                    tasks.forEach(t => { if (!distinctTrades.includes(t.trade)) distinctTrades.push(t.trade); });
+                    const colorFor = (trade) => tradeColor(trade, distinctTrades.indexOf(trade));
+                    const allDates = tasks.flatMap(t => [t.planned_start, t.planned_end, t.actual_start, t.actual_end].filter(Boolean));
+                    const minDate = new Date(Math.min(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
+                    const maxDate = new Date(Math.max(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
+                    const totalDays = Math.max(1, (maxDate - minDate) / 86400000);
+                    const pctFor = (dateStr) => ((new Date(dateStr + "T00:00:00") - minDate) / 86400000 / totalDays) * 100;
+                    const todayPct = pctFor(new Date().toISOString().slice(0, 10));
+                    const showTodayLine = todayPct >= 0 && todayPct <= 100;
+                    return React.createElement("div", { key: p.id, style: { marginBottom: 32 } },
+                        React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 4 } }, p.address),
+                        React.createElement("div", { style: { color: C.muted, fontSize: 12, marginBottom: 12 } },
+                            minDate.toLocaleDateString(),
+                            " \u2192 ",
+                            maxDate.toLocaleDateString(),
+                            "   (lighter bar = planned, solid bar = actual)"),
+                        React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: "16px 16px 8px", position: "relative" } },
+                            showTodayLine && React.createElement("div", { style: { position: "absolute", top: 8, bottom: 8, left: `calc(${todayPct}% + 16px)`, width: 2, background: C.navy, zIndex: 2 } }),
+                            showTodayLine && React.createElement("div", { style: { position: "absolute", top: -2, left: `calc(${todayPct}% + 16px)`, transform: "translateX(-50%)", fontSize: 10, color: C.navy, fontWeight: 700, background: "#fff", padding: "0 4px" } }, "Today"),
+                            tasks.map(t => {
+                                const color = colorFor(t.trade);
+                                const plannedLeft = pctFor(t.planned_start);
+                                const plannedWidth = Math.max(1.5, pctFor(t.planned_end) - plannedLeft);
+                                const hasActual = t.actual_start && t.actual_end;
+                                const actualLeft = hasActual ? pctFor(t.actual_start) : null;
+                                const actualWidth = hasActual ? Math.max(1.5, pctFor(t.actual_end) - actualLeft) : null;
+                                return React.createElement("div", { key: t.id, style: { marginBottom: 14, cursor: "pointer" }, onClick: () => openEditScheduleTask(t) },
+                                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 } },
+                                        React.createElement("span", { style: { fontWeight: 700, color: C.navy } },
+                                            t.trade,
+                                            t.contractor_id ? " \u2014 " + contractorName(t.contractor_id) : ""),
+                                        React.createElement("button", { style: { ...btnDangerSm, padding: "1px 8px" }, onClick: (e) => { e.stopPropagation(); deleteScheduleTask(t); } }, "\u00d7")),
+                                    React.createElement("div", { style: { position: "relative", height: hasActual ? 20 : 12, background: C.bg, borderRadius: 4 } },
+                                        React.createElement("div", { style: { position: "absolute", left: plannedLeft + "%", width: plannedWidth + "%", top: 0, height: hasActual ? 9 : 12, background: color, opacity: 0.4, borderRadius: 3 } }),
+                                        hasActual && React.createElement("div", { style: { position: "absolute", left: actualLeft + "%", width: actualWidth + "%", bottom: 0, height: 9, background: color, borderRadius: 3 } })));
+                            })),
+                        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12, marginTop: 10 } },
+                            distinctTrades.map(trade => React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: C.muted } },
+                                React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade) } }),
+                                trade))));
+                })),
         printChangeOrder && (() => {
             const co = printChangeOrder;
             const isClient = co._audience === "client";
@@ -4265,6 +4388,47 @@ function App() {
             React.createElement("input", { style: inp, placeholder: "Notes", value: form.punchItemNotes || "", onChange: e => setF("punchItemNotes", e.target.value) }),
             React.createElement("div", { style: { display: "flex", gap: 10 } },
                 React.createElement("button", { style: btnP, onClick: updatePunchListItem }, "Save Changes"),
+                React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
+        modal === "scheduleTask" && (React.createElement(Modal, { title: "Add Trade to Schedule", onClose: closeModal },
+            React.createElement("select", { style: inp, value: form.propertyId || "", onChange: e => setF("propertyId", e.target.value) },
+                React.createElement("option", { value: "" }, "Select job site\u2026"),
+                properties.map(p => React.createElement("option", { key: p.id, value: p.id }, p.address))),
+            React.createElement("input", { style: inp, list: "trade-list", placeholder: "Trade (e.g. Framing, Electrical, Paint)", value: form.scheduleTrade || "", onChange: e => setF("scheduleTrade", e.target.value) }),
+            React.createElement("datalist", { id: "trade-list" }, Object.keys(TRADE_COLORS).map(t => React.createElement("option", { key: t, value: t }))),
+            React.createElement("select", { style: inp, value: form.scheduleContractorId || "", onChange: e => setF("scheduleContractorId", e.target.value) },
+                React.createElement("option", { value: "" }, "Assign Contractor (optional)"),
+                contractors.map(c => React.createElement("option", { key: c.id, value: c.id },
+                    c.name,
+                    " \u2014 ",
+                    c.trade))),
+            React.createElement("label", { style: { fontSize: 12, color: C.muted, display: "block", marginBottom: 4 } }, "Planned Start"),
+            React.createElement("input", { style: inp, type: "date", value: form.schedulePlannedStart || "", onChange: e => setF("schedulePlannedStart", e.target.value) }),
+            React.createElement("label", { style: { fontSize: 12, color: C.muted, display: "block", marginBottom: 4 } }, "Planned End"),
+            React.createElement("input", { style: inp, type: "date", value: form.schedulePlannedEnd || "", onChange: e => setF("schedulePlannedEnd", e.target.value) }),
+            React.createElement("input", { style: inp, placeholder: "Notes (optional)", value: form.scheduleNotes || "", onChange: e => setF("scheduleNotes", e.target.value) }),
+            React.createElement("div", { style: { display: "flex", gap: 10 } },
+                React.createElement("button", { style: btnP, onClick: addScheduleTask }, "Add to Schedule"),
+                React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
+        modal === "editScheduleTask" && (React.createElement(Modal, { title: "Edit Scheduled Trade", onClose: closeModal },
+            React.createElement("input", { style: inp, list: "trade-list", placeholder: "Trade", value: form.scheduleTrade || "", onChange: e => setF("scheduleTrade", e.target.value) }),
+            React.createElement("datalist", { id: "trade-list" }, Object.keys(TRADE_COLORS).map(t => React.createElement("option", { key: t, value: t }))),
+            React.createElement("select", { style: inp, value: form.scheduleContractorId || "", onChange: e => setF("scheduleContractorId", e.target.value) },
+                React.createElement("option", { value: "" }, "Assign Contractor (optional)"),
+                contractors.map(c => React.createElement("option", { key: c.id, value: c.id },
+                    c.name,
+                    " \u2014 ",
+                    c.trade))),
+            React.createElement("label", { style: { fontSize: 12, color: C.muted, display: "block", marginBottom: 4 } }, "Planned Start"),
+            React.createElement("input", { style: inp, type: "date", value: form.schedulePlannedStart || "", onChange: e => setF("schedulePlannedStart", e.target.value) }),
+            React.createElement("label", { style: { fontSize: 12, color: C.muted, display: "block", marginBottom: 4 } }, "Planned End"),
+            React.createElement("input", { style: inp, type: "date", value: form.schedulePlannedEnd || "", onChange: e => setF("schedulePlannedEnd", e.target.value) }),
+            React.createElement("label", { style: { fontSize: 12, color: C.green, display: "block", marginBottom: 4, marginTop: 8, fontWeight: 700 } }, "Actual Start (fill in once work begins)"),
+            React.createElement("input", { style: inp, type: "date", value: form.scheduleActualStart || "", onChange: e => setF("scheduleActualStart", e.target.value) }),
+            React.createElement("label", { style: { fontSize: 12, color: C.green, display: "block", marginBottom: 4, fontWeight: 700 } }, "Actual End (fill in once complete)"),
+            React.createElement("input", { style: inp, type: "date", value: form.scheduleActualEnd || "", onChange: e => setF("scheduleActualEnd", e.target.value) }),
+            React.createElement("input", { style: inp, placeholder: "Notes (optional)", value: form.scheduleNotes || "", onChange: e => setF("scheduleNotes", e.target.value) }),
+            React.createElement("div", { style: { display: "flex", gap: 10 } },
+                React.createElement("button", { style: btnP, onClick: updateScheduleTask }, "Save Changes"),
                 React.createElement("button", { style: btnS, onClick: closeModal }, "Cancel")))),
         modal === "changeOrder" && (React.createElement(Modal, { title: "New Change Order", onClose: closeModal },
             React.createElement("select", { style: inp, value: form.coPropertyId || "", onChange: e => setF("coPropertyId", e.target.value) },
