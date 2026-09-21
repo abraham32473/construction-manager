@@ -2011,7 +2011,8 @@ function App() {
         const tasks = scheduleTasks.filter(t => t.property_id === p.id).slice().sort((a, b) => a.planned_start.localeCompare(b.planned_start));
         if (tasks.length === 0) {
             return React.createElement("div", { key: p.id, style: { marginBottom: 24 } },
-                React.createElement("h3", { style: { color: C.navy, fontSize: big ? 20 : 16, marginBottom: 8 } }, p.address),
+                React.createElement("h3", { style: { color: C.navy, fontSize: big ? 20 : 16, marginBottom: 4 } }, p.address),
+                p.lease_end && React.createElement("div", { style: { color: C.red, fontSize: 13, fontWeight: 700, marginBottom: 8 } }, "Target Completion: " + new Date(p.lease_end + "T00:00:00").toLocaleDateString()),
                 React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No trades scheduled yet."));
         }
         const distinctTrades = [];
@@ -2020,12 +2021,16 @@ function App() {
         const todayStr = new Date().toISOString().slice(0, 10);
         const allDates = tasks.flatMap(t => [t.planned_start, t.planned_end, t.actual_start, t.actual_end].filter(Boolean));
         allDates.push(todayStr);
+        if (p.lease_end)
+            allDates.push(p.lease_end);
         const minDate = new Date(Math.min(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
         const maxDate = new Date(Math.max(...allDates.map(d => new Date(d + "T00:00:00").getTime())));
         const totalDays = Math.max(1, (maxDate - minDate) / 86400000);
         const fracFor = (dateStr) => (new Date(dateStr + "T00:00:00") - minDate) / 86400000 / totalDays;
         const todayFrac = fracFor(new Date().toISOString().slice(0, 10));
         const showTodayLine = todayFrac >= 0 && todayFrac <= 1;
+        const targetFrac = p.lease_end ? fracFor(p.lease_end) : null;
+        const showTargetLine = targetFrac !== null && targetFrac >= 0 && targetFrac <= 1;
         const tickFracs = [0, 0.25, 0.5, 0.75, 1];
         const tickDates = tickFracs.map(f => new Date(minDate.getTime() + f * totalDays * 86400000));
         const ROW_H = big ? 48 : 40;
@@ -2038,7 +2043,8 @@ function App() {
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
                 React.createElement("h3", { style: { color: C.navy, fontSize: big ? 20 : 16 } }, p.address),
                 !big && React.createElement("button", { style: { ...btnS, padding: "5px 12px", fontSize: 12 }, onClick: () => setExpandedSchedule(p.id) }, "Expand")),
-            React.createElement("div", { style: { color: C.muted, fontSize: big ? 14 : 12, marginBottom: 12 } }, "Lighter bar = planned \u2014 solid bar = actual"),
+            p.lease_end && React.createElement("div", { style: { color: C.red, fontSize: big ? 15 : 13, fontWeight: 700, marginBottom: 4 } }, "Target Completion: " + new Date(p.lease_end + "T00:00:00").toLocaleDateString()),
+            React.createElement("div", { style: { color: C.muted, fontSize: big ? 14 : 12, marginBottom: 12 } }, "Lighter bar = planned \u2014 solid bar = actual" + (p.lease_end ? " \u2014 red line = target completion" : "")),
             React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 16, display: "flex", position: "relative" } },
                 React.createElement("div", { style: { width: LABEL_W, flexShrink: 0 } },
                     React.createElement("div", { style: { height: HEADER_H } }),
@@ -2049,6 +2055,8 @@ function App() {
                     tickFracs.map((f, i) => React.createElement("line", { key: "gl" + i, x1: xFor(f), x2: xFor(f), y1: 0, y2: totalH, stroke: C.border, strokeWidth: 1 })),
                     tickFracs.map((f, i) => React.createElement("text", { key: "tx" + i, x: xFor(f), y: 15, fontSize: big ? 13 : 10, fill: C.muted, fontWeight: 600, textAnchor: i === 0 ? "start" : (i === tickFracs.length - 1 ? "end" : "middle") }, tickDates[i].toLocaleDateString(undefined, { month: "numeric", day: "numeric" }))),
                     showTodayLine && React.createElement("line", { x1: xFor(todayFrac), x2: xFor(todayFrac), y1: 0, y2: totalH, stroke: C.navy, strokeWidth: 2 }),
+                    showTargetLine && React.createElement("line", { x1: xFor(targetFrac), x2: xFor(targetFrac), y1: 0, y2: totalH, stroke: C.red, strokeWidth: 2, strokeDasharray: "5,3" }),
+                    showTargetLine && React.createElement("text", { x: xFor(targetFrac), y: totalH - 4, fontSize: big ? 12 : 9, fill: C.red, fontWeight: 700, textAnchor: targetFrac > 0.85 ? "end" : "start" }, "Target"),
                     tasks.map((t, i) => {
                         const color = colorFor(t.trade);
                         const rowTop = HEADER_H + i * ROW_H;
