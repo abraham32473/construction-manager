@@ -2031,8 +2031,16 @@ function App() {
         const showTodayLine = todayFrac >= 0 && todayFrac <= 1;
         const targetFrac = p.lease_end ? fracFor(p.lease_end) : null;
         const showTargetLine = targetFrac !== null && targetFrac >= 0 && targetFrac <= 1;
-        const tickFracs = [0, 0.25, 0.5, 0.75, 1];
-        const tickDates = tickFracs.map(f => new Date(minDate.getTime() + f * totalDays * 86400000));
+        const tickDates = [];
+        const firstSunday = new Date(minDate);
+        firstSunday.setDate(firstSunday.getDate() - firstSunday.getDay());
+        for (let d = new Date(firstSunday); d <= maxDate; d.setDate(d.getDate() + 7)) {
+            if (d >= minDate)
+                tickDates.push(new Date(d));
+        }
+        if (tickDates.length === 0)
+            tickDates.push(new Date(minDate));
+        const tickFracs = tickDates.map(d => Math.min(1, Math.max(0, (d - minDate) / 86400000 / totalDays)));
         const ROW_H = big ? 48 : 40;
         const HEADER_H = big ? 30 : 26;
         const VBW = big ? 1200 : 600;
