@@ -2039,7 +2039,7 @@ function App() {
                 React.createElement("h3", { style: { color: C.navy, fontSize: big ? 20 : 16 } }, p.address),
                 !big && React.createElement("button", { style: { ...btnS, padding: "5px 12px", fontSize: 12 }, onClick: () => setExpandedSchedule(p.id) }, "Expand")),
             React.createElement("div", { style: { color: C.muted, fontSize: big ? 14 : 12, marginBottom: 12 } }, "Lighter bar = planned \u2014 solid bar = actual"),
-            React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 16, display: "flex" } },
+            React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 16, display: "flex", position: "relative" } },
                 React.createElement("div", { style: { width: LABEL_W, flexShrink: 0 } },
                     React.createElement("div", { style: { height: HEADER_H } }),
                     tasks.map(t => React.createElement("div", { key: t.id, style: { height: ROW_H, display: "flex", alignItems: "center", gap: 6 } },
@@ -2061,10 +2061,11 @@ function App() {
                         const barH = hasActual ? (big ? 12 : 9) : (big ? 16 : 12);
                         const plannedY = hasActual ? rowTop + (ROW_H / 2) - barH - 1 : rowTop + (ROW_H - barH) / 2;
                         const actualY = rowTop + (ROW_H / 2) + 1;
-                        return React.createElement("g", { key: t.id, onClick: () => openEditScheduleTask(t), style: { cursor: "pointer" } },
+                        return React.createElement("g", { key: t.id },
                             React.createElement("rect", { x: plannedLeft, y: plannedY, width: plannedWidth, height: barH, fill: color, opacity: 0.4, rx: 3 }),
                             hasActual && React.createElement("rect", { x: actualLeft, y: actualY, width: actualWidth, height: barH, fill: color, rx: 3 }));
-                    }))),
+                    })),
+                tasks.map((t, i) => React.createElement("div", { key: "tap-" + t.id, onClick: () => openEditScheduleTask(t), style: { position: "absolute", top: HEADER_H + i * ROW_H, left: LABEL_W, right: 0, height: ROW_H, cursor: "pointer" } }))),
             React.createElement("div", { style: { marginTop: 12 } },
                 distinctTrades.map(trade => React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", gap: 6, fontSize: big ? 14 : 12, color: C.muted, marginBottom: 4 } },
                     React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade), flexShrink: 0 } }),
