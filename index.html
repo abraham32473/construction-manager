@@ -2060,7 +2060,7 @@ function App() {
                         React.createElement("button", { style: { ...btnDangerSm, padding: "1px 6px", fontSize: big ? 13 : 11, flexShrink: 0 }, onClick: () => deleteScheduleTask(t) }, "\u00d7"),
                         React.createElement("div", { style: { fontSize: big ? 14 : 12, fontWeight: 700, color: C.navy, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }, onClick: () => openEditScheduleTask(t) }, t.trade)))),
                 React.createElement("svg", { viewBox: `0 0 ${VBW} ${totalH}`, preserveAspectRatio: "none", style: { width: "100%", height: totalH, display: "block" } },
-                    tickFracs.map((f, i) => React.createElement("line", { key: "gl" + i, x1: xFor(f), x2: xFor(f), y1: 0, y2: totalH, stroke: C.border, strokeWidth: 1 })),
+                    tickFracs.map((f, i) => React.createElement("line", { key: "gl" + i, x1: xFor(f), x2: xFor(f), y1: 0, y2: totalH, stroke: "#333", strokeWidth: 1, strokeDasharray: "2,4", strokeLinecap: "round" })),
                     tickFracs.map((f, i) => React.createElement("text", { key: "tx" + i, x: xFor(f), y: 15, fontSize: big ? 13 : 10, fill: C.muted, fontWeight: 600, textAnchor: i === 0 ? "start" : (i === tickFracs.length - 1 ? "end" : "middle") }, tickDates[i].toLocaleDateString(undefined, { month: "numeric", day: "numeric" }))),
                     showTodayLine && React.createElement("line", { x1: xFor(todayFrac), x2: xFor(todayFrac), y1: 0, y2: totalH, stroke: C.navy, strokeWidth: 2 }),
                     showTargetLine && React.createElement("line", { x1: xFor(targetFrac), x2: xFor(targetFrac), y1: 0, y2: totalH, stroke: C.red, strokeWidth: 2, strokeDasharray: "5,3" }),
