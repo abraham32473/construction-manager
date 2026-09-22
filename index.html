@@ -1969,6 +1969,7 @@ function App() {
             contractor_id: form.scheduleContractorId ? Number(form.scheduleContractorId) : null,
             planned_start: form.schedulePlannedStart,
             planned_end: form.schedulePlannedEnd,
+            contract_amount: form.scheduleContractAmount ? Number(form.scheduleContractAmount) : 0,
             notes: form.scheduleNotes || null,
         }).select());
         showErr(error);
@@ -1977,7 +1978,7 @@ function App() {
         closeModal();
     };
     const openEditScheduleTask = (t) => {
-        setForm({ scheduleTaskId: t.id, propertyId: String(t.property_id), scheduleTrade: t.trade, scheduleContractorId: t.contractor_id ? String(t.contractor_id) : "", schedulePlannedStart: t.planned_start, schedulePlannedEnd: t.planned_end, scheduleActualStart: t.actual_start || "", scheduleActualEnd: t.actual_end || "", scheduleNotes: t.notes || "" });
+        setForm({ scheduleTaskId: t.id, propertyId: String(t.property_id), scheduleTrade: t.trade, scheduleContractorId: t.contractor_id ? String(t.contractor_id) : "", schedulePlannedStart: t.planned_start, schedulePlannedEnd: t.planned_end, scheduleActualStart: t.actual_start || "", scheduleActualEnd: t.actual_end || "", scheduleContractAmount: t.contract_amount || "", scheduleNotes: t.notes || "" });
         setModal("editScheduleTask");
     };
     const updateScheduleTask = async () => {
@@ -1990,6 +1991,7 @@ function App() {
             planned_end: form.schedulePlannedEnd,
             actual_start: form.scheduleActualStart || null,
             actual_end: form.scheduleActualEnd || null,
+            contract_amount: form.scheduleContractAmount ? Number(form.scheduleContractAmount) : 0,
             notes: form.scheduleNotes || null,
         };
         const { error } = await withRetry(() => sb.from("cm_schedule_tasks").update(updates).eq("id", form.scheduleTaskId));
@@ -3365,11 +3367,31 @@ function App() {
                             React.createElement("button", { style: btnDangerSm, onClick: () => deleteContractor(c) }, "Delete")))))));
             })),
             !loadingData && tab === "Subcontractors" && contractors.length === 0 && React.createElement("div", { style: { color: C.muted } }, "No contractors added yet."),
-            !loadingData && tab === "Budget" && (jobCosts.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "No costs logged yet.") : renderGroupedCards(jobCosts, jc => (React.createElement("div", { key: jc.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
-                React.createElement("div", null,
-                    React.createElement("div", { style: { fontWeight: 700 } }, jc.category, jc.description ? " — " + jc.description : ""),
-                    React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "$" + Number(jc.amount).toFixed(2) + " — " + jc.cost_date)),
-                React.createElement("button", { style: btnDangerSm, onClick: () => deleteJobCost(jc) }, "Delete"))))),
+            !loadingData && tab === "Budget" && (properties.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "Add a job site first, then you can track its budget.") : properties.map(p => {
+                const pCosts = jobCosts.filter(jc => jc.property_id === p.id);
+                const pSchedule = scheduleTasks.filter(t => t.property_id === p.id);
+                const costsTotal = pCosts.reduce((s, jc) => s + Number(jc.amount || 0), 0);
+                const scheduleTotal = pSchedule.reduce((s, t) => s + Number(t.contract_amount || 0), 0);
+                const spent = costsTotal + scheduleTotal;
+                const budget = Number(p.rent) || 0;
+                const remaining = budget - spent;
+                if (pCosts.length === 0 && scheduleTotal === 0 && budget === 0)
+                    return null;
+                return React.createElement("div", { key: p.id, style: { marginBottom: 24 } },
+                    React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 4 } }, p.address),
+                    React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 10 } },
+                        "Job Budget: $" + budget.toLocaleString() +
+                        "   \u2014   Spent: $" + spent.toLocaleString() + (scheduleTotal > 0 ? " (Costs $" + costsTotal.toLocaleString() + " + Scheduled Trades $" + scheduleTotal.toLocaleString() + ")" : "") +
+                        "   \u2014   Remaining: $" + remaining.toLocaleString()),
+                    pSchedule.filter(t => Number(t.contract_amount) > 0).map(t => React.createElement("div", { key: "sch-" + t.id, style: { background: "#fff", padding: "10px 14px", borderRadius: 10, border: "1px solid " + C.border, marginBottom: 8, display: "flex", justifyContent: "space-between", fontSize: 13 } },
+                        React.createElement("div", null, t.trade, " (Schedule)", t.contractor_id ? " \u2014 " + contractorName(t.contractor_id) : ""),
+                        React.createElement("div", { style: { fontWeight: 700 } }, "$" + Number(t.contract_amount).toLocaleString()))),
+                    pCosts.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No other costs logged yet.") : pCosts.map(jc => React.createElement("div", { key: jc.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
+                        React.createElement("div", null,
+                            React.createElement("div", { style: { fontWeight: 700 } }, jc.category, jc.description ? " — " + jc.description : ""),
+                            React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "$" + Number(jc.amount).toFixed(2) + " — " + jc.cost_date)),
+                        React.createElement("button", { style: btnDangerSm, onClick: () => deleteJobCost(jc) }, "Delete"))));
+            })),
             !loadingData && tab === "Materials" && (materials.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "No materials logged yet.") : renderGroupedCards(materials, m => (React.createElement("div", { key: m.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
                 React.createElement("div", null,
                     React.createElement("div", { style: { fontWeight: 700 } }, m.item_name),
@@ -4448,6 +4470,7 @@ function App() {
             React.createElement("input", { style: inp, type: "date", value: form.schedulePlannedStart || "", onChange: e => setF("schedulePlannedStart", e.target.value) }),
             React.createElement("label", { style: { fontSize: 12, color: C.muted, display: "block", marginBottom: 4 } }, "Planned End"),
             React.createElement("input", { style: inp, type: "date", value: form.schedulePlannedEnd || "", onChange: e => setF("schedulePlannedEnd", e.target.value) }),
+            React.createElement("input", { style: inp, type: "number", placeholder: "Contract Price for this trade ($, optional)", value: form.scheduleContractAmount || "", onChange: e => setF("scheduleContractAmount", e.target.value) }),
             React.createElement("input", { style: inp, placeholder: "Notes (optional)", value: form.scheduleNotes || "", onChange: e => setF("scheduleNotes", e.target.value) }),
             React.createElement("div", { style: { display: "flex", gap: 10 } },
                 React.createElement("button", { style: btnP, onClick: addScheduleTask }, "Add to Schedule"),
@@ -4469,6 +4492,7 @@ function App() {
             React.createElement("input", { style: inp, type: "date", value: form.scheduleActualStart || "", onChange: e => setF("scheduleActualStart", e.target.value) }),
             React.createElement("label", { style: { fontSize: 12, color: C.green, display: "block", marginBottom: 4, fontWeight: 700 } }, "Actual End (fill in once complete)"),
             React.createElement("input", { style: inp, type: "date", value: form.scheduleActualEnd || "", onChange: e => setF("scheduleActualEnd", e.target.value) }),
+            React.createElement("input", { style: inp, type: "number", placeholder: "Contract Price for this trade ($, optional)", value: form.scheduleContractAmount || "", onChange: e => setF("scheduleContractAmount", e.target.value) }),
             React.createElement("input", { style: inp, placeholder: "Notes (optional)", value: form.scheduleNotes || "", onChange: e => setF("scheduleNotes", e.target.value) }),
             React.createElement("div", { style: { display: "flex", gap: 10 } },
                 React.createElement("button", { style: btnP, onClick: updateScheduleTask }, "Save Changes"),
