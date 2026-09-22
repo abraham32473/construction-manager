@@ -1451,7 +1451,7 @@ function App() {
     const addJobCost = async () => {
         if (!form.jcPropertyId || !form.jcAmount)
             return;
-        const { data, error } = await withRetry(() => sb.from("job_costs").insert({ user_id: userId(), property_id: Number(form.jcPropertyId), category: form.jcCategory || "Other", description: form.jcDescription || "", amount: Number(form.jcAmount) || 0, cost_date: form.jcDate || new Date().toISOString().slice(0, 10) }).select());
+        const { data, error } = await withRetry(() => sb.from("job_costs").insert({ user_id: userId(), property_id: Number(form.jcPropertyId), category: form.jcCategory || "Other", trade: form.jcTrade || null, contractor_id: form.jcContractorId ? Number(form.jcContractorId) : null, description: form.jcDescription || "", amount: Number(form.jcAmount) || 0, cost_date: form.jcDate || new Date().toISOString().slice(0, 10) }).select());
         showErr(error);
         if (data)
             setJobCosts(j => [...data, ...j]);
@@ -2088,7 +2088,9 @@ function App() {
                 tasks.map((t, i) => React.createElement("div", { key: "tap-" + t.id, onClick: () => openEditScheduleTask(t), style: { position: "absolute", top: HEADER_H + i * ROW_H, left: LABEL_W, right: 0, height: ROW_H, cursor: "pointer" } }))),
             React.createElement("div", { style: { marginTop: 12 } },
                 distinctTrades.map(trade => {
-                    const tradeTotal = tasks.filter(t => t.trade === trade).reduce((s, t) => s + Number(t.contract_amount || 0), 0);
+                    const scheduleAmt = tasks.filter(t => t.trade === trade).reduce((s, t) => s + Number(t.contract_amount || 0), 0);
+                    const budgetAmt = jobCosts.filter(jc => jc.property_id === p.id && jc.trade === trade).reduce((s, jc) => s + Number(jc.amount || 0), 0);
+                    const tradeTotal = scheduleAmt + budgetAmt;
                     return React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", gap: 8, fontSize: big ? 14 : 12, color: C.muted, marginBottom: 4 } },
                         React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade), flexShrink: 0 } }),
                         React.createElement("div", null, trade),
@@ -3394,7 +3396,7 @@ function App() {
                         React.createElement("div", { style: { fontWeight: 700 } }, "$" + Number(t.contract_amount).toLocaleString()))),
                     pCosts.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No other costs logged yet.") : pCosts.map(jc => React.createElement("div", { key: jc.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
                         React.createElement("div", null,
-                            React.createElement("div", { style: { fontWeight: 700 } }, jc.category, jc.description ? " — " + jc.description : ""),
+                            React.createElement("div", { style: { fontWeight: 700 } }, jc.category, jc.trade ? " \u2014 " + jc.trade : "", jc.description ? " — " + jc.description : ""),
                             React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "$" + Number(jc.amount).toFixed(2) + " — " + jc.cost_date)),
                         React.createElement("button", { style: btnDangerSm, onClick: () => deleteJobCost(jc) }, "Delete"))));
             })),
@@ -4396,6 +4398,14 @@ function App() {
             React.createElement("select", { style: inp, value: form.jcCategory || "", onChange: e => setF("jcCategory", e.target.value) },
                 React.createElement("option", { value: "" }, "Select Category\u2026"),
                 ["Labor", "Material", "Permit", "Equipment", "Subcontractor", "Other"].map(c => React.createElement("option", { key: c, value: c }, c))),
+            React.createElement("input", { style: inp, list: "trade-list", placeholder: "Trade (e.g. Footing, Plumbing) \u2014 optional", value: form.jcTrade || "", onChange: e => setF("jcTrade", e.target.value) }),
+            React.createElement("datalist", { id: "trade-list" }, Object.keys(TRADE_COLORS).map(t => React.createElement("option", { key: t, value: t }))),
+            React.createElement("select", { style: inp, value: form.jcContractorId || "", onChange: e => setF("jcContractorId", e.target.value) },
+                React.createElement("option", { value: "" }, "Assign Contractor (optional)"),
+                contractors.map(c => React.createElement("option", { key: c.id, value: c.id },
+                    c.name,
+                    " \u2014 ",
+                    c.trade))),
             React.createElement("input", { style: inp, placeholder: "Description", value: form.jcDescription || "", onChange: e => setF("jcDescription", e.target.value) }),
             React.createElement("input", { style: inp, type: "number", placeholder: "Amount ($)", value: form.jcAmount || "", onChange: e => setF("jcAmount", e.target.value) }),
             React.createElement("input", { style: inp, type: "date", value: form.jcDate || "", onChange: e => setF("jcDate", e.target.value) }),
