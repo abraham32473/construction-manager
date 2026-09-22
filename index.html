@@ -2014,6 +2014,7 @@ function App() {
         if (tasks.length === 0) {
             return React.createElement("div", { key: p.id, style: { marginBottom: 24 } },
                 React.createElement("h3", { style: { color: C.navy, fontSize: big ? 20 : 16, marginBottom: 4 } }, p.address),
+                Number(p.rent) > 0 && React.createElement("div", { style: { color: C.navy, fontSize: 13, fontWeight: 700, marginBottom: 4 } }, "Project Budget: $" + Number(p.rent).toLocaleString()),
                 p.lease_end && React.createElement("div", { style: { color: C.red, fontSize: 13, fontWeight: 700, marginBottom: 8 } }, "Target Completion: " + new Date(p.lease_end + "T00:00:00").toLocaleDateString()),
                 React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No trades scheduled yet."));
         }
@@ -2053,6 +2054,7 @@ function App() {
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
                 React.createElement("h3", { style: { color: C.navy, fontSize: big ? 20 : 16 } }, p.address),
                 !big && React.createElement("button", { style: { ...btnS, padding: "5px 12px", fontSize: 12 }, onClick: () => setExpandedSchedule(p.id) }, "Expand")),
+            Number(p.rent) > 0 && React.createElement("div", { style: { color: C.navy, fontSize: big ? 15 : 13, fontWeight: 700, marginBottom: 4 } }, "Project Budget: $" + Number(p.rent).toLocaleString()),
             p.lease_end && React.createElement("div", { style: { color: C.red, fontSize: big ? 15 : 13, fontWeight: 700, marginBottom: 4 } }, "Target Completion: " + new Date(p.lease_end + "T00:00:00").toLocaleDateString()),
             React.createElement("div", { style: { color: C.muted, fontSize: big ? 14 : 12, marginBottom: 12 } }, "Lighter bar = planned \u2014 solid bar = actual" + (p.lease_end ? " \u2014 red line = target completion" : "")),
             React.createElement("div", { style: { background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 16, display: "flex", position: "relative" } },
@@ -2085,9 +2087,14 @@ function App() {
                     })),
                 tasks.map((t, i) => React.createElement("div", { key: "tap-" + t.id, onClick: () => openEditScheduleTask(t), style: { position: "absolute", top: HEADER_H + i * ROW_H, left: LABEL_W, right: 0, height: ROW_H, cursor: "pointer" } }))),
             React.createElement("div", { style: { marginTop: 12 } },
-                distinctTrades.map(trade => React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", gap: 6, fontSize: big ? 14 : 12, color: C.muted, marginBottom: 4 } },
-                    React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade), flexShrink: 0 } }),
-                    trade))));
+                distinctTrades.map(trade => {
+                    const tradeTotal = tasks.filter(t => t.trade === trade).reduce((s, t) => s + Number(t.contract_amount || 0), 0);
+                    return React.createElement("div", { key: trade, style: { display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: big ? 14 : 12, color: C.muted, marginBottom: 4 } },
+                        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                            React.createElement("div", { style: { width: 12, height: 12, borderRadius: 3, background: colorFor(trade), flexShrink: 0 } }),
+                            trade),
+                        tradeTotal > 0 && React.createElement("div", { style: { fontWeight: 700, color: C.navy } }, "$" + tradeTotal.toLocaleString()));
+                })));
     };
     const addNotice = async () => {
         if (!form.propertyId || !form.noticeFile)
