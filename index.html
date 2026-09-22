@@ -3378,22 +3378,27 @@ function App() {
             !loadingData && tab === "Budget" && (properties.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "Add a job site first, then you can track its budget.") : properties.map(p => {
                 const pCosts = jobCosts.filter(jc => jc.property_id === p.id);
                 const pSchedule = scheduleTasks.filter(t => t.property_id === p.id);
+                const pMaterials = materials.filter(m => m.property_id === p.id);
                 const costsTotal = pCosts.reduce((s, jc) => s + Number(jc.amount || 0), 0);
                 const scheduleTotal = pSchedule.reduce((s, t) => s + Number(t.contract_amount || 0), 0);
-                const spent = costsTotal + scheduleTotal;
+                const materialsTotal = pMaterials.reduce((s, m) => s + Number(m.cost_per_unit || 0), 0);
+                const spent = costsTotal + scheduleTotal + materialsTotal;
                 const budget = Number(p.rent) || 0;
                 const remaining = budget - spent;
-                if (pCosts.length === 0 && scheduleTotal === 0 && budget === 0)
+                if (pCosts.length === 0 && scheduleTotal === 0 && materialsTotal === 0 && budget === 0)
                     return null;
                 return React.createElement("div", { key: p.id, style: { marginBottom: 24 } },
                     React.createElement("h3", { style: { color: C.navy, fontSize: 16, marginBottom: 4 } }, p.address),
                     React.createElement("div", { style: { color: C.muted, fontSize: 13, marginBottom: 10 } },
                         "Job Budget: $" + budget.toLocaleString() +
-                        "   \u2014   Spent: $" + spent.toLocaleString() + (scheduleTotal > 0 ? " (Costs $" + costsTotal.toLocaleString() + " + Scheduled Trades $" + scheduleTotal.toLocaleString() + ")" : "") +
+                        "   \u2014   Spent: $" + spent.toLocaleString() + ((scheduleTotal > 0 || materialsTotal > 0) ? " (Costs $" + costsTotal.toLocaleString() + " + Scheduled Trades $" + scheduleTotal.toLocaleString() + " + Materials $" + materialsTotal.toLocaleString() + ")" : "") +
                         "   \u2014   Remaining: $" + remaining.toLocaleString()),
                     pSchedule.filter(t => Number(t.contract_amount) > 0).map(t => React.createElement("div", { key: "sch-" + t.id, style: { background: "#fff", padding: "10px 14px", borderRadius: 10, border: "1px solid " + C.border, marginBottom: 8, display: "flex", justifyContent: "space-between", fontSize: 13 } },
                         React.createElement("div", null, t.trade, " (Schedule)", t.contractor_id ? " \u2014 " + contractorName(t.contractor_id) : ""),
                         React.createElement("div", { style: { fontWeight: 700 } }, "$" + Number(t.contract_amount).toLocaleString()))),
+                    pMaterials.filter(m => Number(m.cost_per_unit || 0) > 0).map(m => React.createElement("div", { key: "mat-" + m.id, style: { background: "#fff", padding: "10px 14px", borderRadius: 10, border: "1px solid " + C.border, marginBottom: 8, display: "flex", justifyContent: "space-between", fontSize: 13 } },
+                        React.createElement("div", null, m.item_name, " (Materials)", m.quantity ? " \u2014 " + m.quantity + " " + m.unit : ""),
+                        React.createElement("div", { style: { fontWeight: 700 } }, "$" + Number(m.cost_per_unit).toLocaleString()))),
                     pCosts.length === 0 ? React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, "No other costs logged yet.") : pCosts.map(jc => React.createElement("div", { key: jc.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
                         React.createElement("div", null,
                             React.createElement("div", { style: { fontWeight: 700 } }, jc.category, jc.trade ? " \u2014 " + jc.trade : "", jc.description ? " — " + jc.description : ""),
@@ -3403,7 +3408,7 @@ function App() {
             !loadingData && tab === "Materials" && (materials.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "No materials logged yet.") : renderGroupedCards(materials, m => (React.createElement("div", { key: m.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 } },
                 React.createElement("div", null,
                     React.createElement("div", { style: { fontWeight: 700 } }, m.item_name),
-                    React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, m.quantity, " ", m.unit, " \u00d7 $", Number(m.cost_per_unit).toFixed(2), m.supplier ? " — " + m.supplier : "", " — ", m.purchase_date),
+                    React.createElement("div", { style: { color: C.muted, fontSize: 13 } }, m.quantity, " ", m.unit, " \u2014 $", Number(m.cost_per_unit).toFixed(2), m.supplier ? " — " + m.supplier : "", " — ", m.purchase_date),
                     m.notes && React.createElement("div", { style: { color: C.muted, fontSize: 12, marginTop: 4 } }, m.notes)),
                 React.createElement("button", { style: btnDangerSm, onClick: () => deleteMaterial(m) }, "Delete"))))),
             !loadingData && tab === "Change Orders" && (changeOrders.length === 0 ? React.createElement("div", { style: { color: C.muted } }, "No change orders yet.") : renderGroupedCards(changeOrders, co => (React.createElement("div", { key: co.id, style: { background: "#fff", padding: 16, borderRadius: 10, border: "1px solid " + C.border, marginBottom: 10 } },
@@ -4419,7 +4424,7 @@ function App() {
             React.createElement("input", { style: inp, placeholder: "Item name", value: form.matItemName || "", onChange: e => setF("matItemName", e.target.value) }),
             React.createElement("input", { style: inp, type: "number", placeholder: "Quantity", value: form.matQuantity || "", onChange: e => setF("matQuantity", e.target.value) }),
             React.createElement("input", { style: inp, placeholder: "Unit (e.g. bags, boards, sq ft)", value: form.matUnit || "", onChange: e => setF("matUnit", e.target.value) }),
-            React.createElement("input", { style: inp, type: "number", placeholder: "Cost per unit ($)", value: form.matCostPerUnit || "", onChange: e => setF("matCostPerUnit", e.target.value) }),
+            React.createElement("input", { style: inp, type: "number", placeholder: "Total Cost ($)", value: form.matCostPerUnit || "", onChange: e => setF("matCostPerUnit", e.target.value) }),
             React.createElement("input", { style: inp, placeholder: "Supplier", value: form.matSupplier || "", onChange: e => setF("matSupplier", e.target.value) }),
             React.createElement("input", { style: inp, type: "date", value: form.matDate || "", onChange: e => setF("matDate", e.target.value) }),
             React.createElement("input", { style: inp, placeholder: "Notes", value: form.matNotes || "", onChange: e => setF("matNotes", e.target.value) }),
